@@ -9,6 +9,7 @@ import type { MpesaCredentialSummary, TenantStatus, TenantSummary } from "@m-ver
 import type { DbParam, ResultSetHeader, RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
 import { config } from "../config.js";
+import { SYSTEM_TENANT_SLUG } from "../constants.js";
 import { AppError, asyncHandler } from "../http.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
@@ -146,7 +147,9 @@ tenantsRouter.get(
     const [rows] = await pool.execute<TenantRow[]>(
       `SELECT id, name, slug, status, commission_rate_pct, contact_email, contact_phone, created_at, updated_at
        FROM tenants
-       ORDER BY status ASC, name ASC`
+       WHERE slug <> ?
+       ORDER BY status ASC, name ASC`,
+      [SYSTEM_TENANT_SLUG]
     );
     response.json({ data: rows.map(mapTenant) });
   })

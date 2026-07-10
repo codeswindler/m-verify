@@ -3,6 +3,7 @@ import type { RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
 import { asyncHandler } from "../http.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
+import { SYSTEM_TENANT_SLUG } from "../constants.js";
 
 type SummaryRow = RowDataPacket & {
   business_count: number;
@@ -44,7 +45,9 @@ platformRouter.get(
         COALESCE(SUM(CASE WHEN DATE(p.created_at) = UTC_DATE()
           THEN p.amount * COALESCE(t.commission_rate_pct, 0) / 100 ELSE 0 END), 0) AS today_platform_revenue
        FROM tenants t
-       LEFT JOIN payments p ON p.tenant_id = t.id AND p.status = 'PAID'`
+       LEFT JOIN payments p ON p.tenant_id = t.id AND p.status = 'PAID'
+       WHERE t.slug <> ?`,
+      [SYSTEM_TENANT_SLUG]
     );
 
     const [breakdownRows] = await pool.execute<BreakdownRow[]>(
@@ -56,8 +59,10 @@ platformRouter.get(
         MAX(p.payment_time) AS last_payment_at
        FROM tenants t
        LEFT JOIN payments p ON p.tenant_id = t.id AND p.status = 'PAID'
+       WHERE t.slug <> ?
        GROUP BY t.id, t.name, t.slug, t.status, t.commission_rate_pct
-       ORDER BY platform_revenue DESC, total_volume DESC, t.name ASC`
+       ORDER BY platform_revenue DESC, total_volume DESC, t.name ASC`,
+      [SYSTEM_TENANT_SLUG]
     );
 
     const summary = summaryRows[0] ?? {

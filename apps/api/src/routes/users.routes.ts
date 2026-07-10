@@ -4,6 +4,7 @@ import { createUserSchema, updateUserSchema } from "@m-verify/shared";
 import type { UserRole } from "@m-verify/shared";
 import type { DbParam, ResultSetHeader, RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
+import { SYSTEM_TENANT_ID } from "../constants.js";
 import { AppError, asyncHandler } from "../http.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
@@ -31,13 +32,20 @@ export const usersRouter = Router();
 
 usersRouter.use("/users", requireAuth, requireRoles("admin", "manager"));
 
-async function ensureTenantExists(tenantId: number): Promise<void> {
+async function ensureTenantExists(tenantId: number, options: { allowSystemTenant?: boolean } = {}): Promise<void> {
+  const clauses = ["id = ?", "status = 'active'"];
+  const params: DbParam[] = [tenantId];
+  if (!options.allowSystemTenant) {
+    clauses.push("id <> ?");
+    params.push(SYSTEM_TENANT_ID);
+  }
+
   const [rows] = await pool.execute<TenantExistsRow[]>(
-    "SELECT id FROM tenants WHERE id = ? AND status = 'active' LIMIT 1",
-    [tenantId]
+    `SELECT id FROM tenants WHERE ${clauses.join(" AND ")} LIMIT 1`,
+    params
   );
   if (!rows[0]) {
-    throw new AppError(400, "Tenant does not exist or is disabled", "TENANT_NOT_AVAILABLE");
+    throw new AppError(400, "Business does not exist or is disabled", "BUSINESS_NOT_AVAILABLE");
   }
 }
 
@@ -77,11 +85,14 @@ usersRouter.post(
       throw new AppError(403, "Business managers cannot create platform admins", "FORBIDDEN");
     }
     const passwordHash = await hashPassword(body.password);
-    const tenantId = auth.user.role === "admin" ? body.tenantId ?? 1 : auth.user.tenantId;
-    if (!tenantId) {
-      throw new AppError(400, "Business user is not assigned to a business", "BUSINESS_REQUIRED");
+    let tenantId = auth.user.role === "admin" ? body.tenantId : auth.user.tenantId;
+    if (auth.user.role === "admin" && body.role === "admin") {
+      tenantId = tenantId ?? SYSTEM_TENANT_ID;
     }
-    await ensureTenantExists(tenantId);
+    if (!tenantId) {
+      throw new AppError(400, "Select a business for this user", "BUSINESS_REQUIRED");
+    }
+    await ensureTenantExists(tenantId, { allowSystemTenant: auth.user.role === "admin" && body.role === "admin" });
 
     try {
       const [result] = await pool.execute<ResultSetHeader>(
@@ -120,6 +131,12 @@ usersRouter.patch(
     if (auth.user.role !== "admin" && body.role === "admin") {
       throw new AppError(403, "Business managers cannot assign platform admin permissions", "FORBIDDEN");
     }
+    const nextRole = body.role ?? target.role;
+    const nextTenantId = body.tenantId !== undefined ? body.tenantId : target.tenant_id;
+    if (auth.user.role === "admin" && nextRole !== "admin" && nextTenantId === SYSTEM_TENANT_ID) {
+      throw new AppError(400, "Select a real business before assigning business staff permissions", "BUSINESS_REQUIRED");
+    }
+
     const updates: string[] = [];
     const params: DbParam[] = [];
 
@@ -136,7 +153,7 @@ usersRouter.patch(
         throw new AppError(403, "Business managers cannot move users between businesses", "FORBIDDEN");
       }
       if (body.tenantId !== null) {
-        await ensureTenantExists(body.tenantId);
+        await ensureTenantExists(body.tenantId, { allowSystemTenant: target.role === "admin" || body.role === "admin" });
       }
       updates.push("tenant_id = ?");
       params.push(body.tenantId);
