@@ -141,6 +141,24 @@ cd /var/www/m-verify
 docker compose --env-file .env.production -f docker-compose.nginx.yml exec api node apps/api/dist/scripts/seed.js
 ```
 
+The seed command creates or re-enables the platform admin from:
+
+```text
+SEED_ADMIN_USERNAME
+SEED_ADMIN_PASSWORD
+SEED_ADMIN_FULL_NAME
+SEED_ADMIN_RESET_PASSWORD
+SEED_DEMO_DATA
+```
+
+Production defaults skip demo payments. Re-running seed with the same username updates the admin full name/role and re-enables the account, but it does not change the password unless `SEED_ADMIN_RESET_PASSWORD=true`. Changing the username creates another admin account and leaves the old one in place.
+
+If you edit `.env.production`, recreate the API container before running seed so the container sees the new env:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.nginx.yml up -d api
+```
+
 Then sign in at:
 
 ```text

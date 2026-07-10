@@ -40,11 +40,19 @@ Start MySQL, API, and admin panel with Docker:
 docker compose up -d --build
 ```
 
-Seed the first admin and demo payments through the API container:
+Seed the first admin through the API container. Local `.env.example` enables demo payments with `SEED_DEMO_DATA=true`; production examples disable demo payments.
 
 ```powershell
 docker compose exec -T api node apps/api/dist/scripts/seed.js
 ```
+
+Seed admin environment behavior:
+
+- `SEED_ADMIN_USERNAME` creates that admin when the seed script runs.
+- Re-running seed with the same username re-enables the admin and updates the full name/role.
+- Re-running seed does not reset the password unless `SEED_ADMIN_RESET_PASSWORD=true`.
+- Changing the username and re-running seed creates another admin; it does not delete the old one.
+- Env changes require recreating the API container before `docker compose exec api ... seed.js` sees them.
 
 If you are running MySQL directly on the host instead of Docker, use:
 

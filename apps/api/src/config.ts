@@ -65,6 +65,8 @@ export const config = {
   seed: {
     adminUsername: process.env.SEED_ADMIN_USERNAME ?? "admin",
     adminPassword: process.env.SEED_ADMIN_PASSWORD ?? "admin123",
-    adminFullName: process.env.SEED_ADMIN_FULL_NAME ?? "M-Verify Admin"
+    adminFullName: process.env.SEED_ADMIN_FULL_NAME ?? "M-Verify Admin",
+    resetAdminPassword: toBoolean("SEED_ADMIN_RESET_PASSWORD", false),
+    demoData: toBoolean("SEED_DEMO_DATA", false)
   }
 } as const;
