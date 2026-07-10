@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "M-Verify",
+  "version": "0.1.0",
+  "identifier": "com.mverify.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build:web",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "M-Verify",
+        "width": 380,
+        "height": 590,
+        "minWidth": 360,
+        "minHeight": 520,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "center": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "M-Verify",
+    "category": "Business",
+    "shortDescription": "Standalone M-Pesa payment verification tool",
+    "longDescription": "M-Verify helps staff confirm M-Pesa payments against server-side payment records."
+  }
+}

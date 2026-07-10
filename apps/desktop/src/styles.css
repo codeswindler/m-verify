@@ -1,0 +1,299 @@
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #17211c;
+  background: #eef3f0;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.screen {
+  width: 100vw;
+  min-height: 100vh;
+  background: #f8faf8;
+  border: 1px solid #cbd7cf;
+  display: flex;
+  flex-direction: column;
+}
+
+.titlebar {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
+  background: #20382b;
+  color: #ffffff;
+  user-select: none;
+}
+
+.title-brand {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 700;
+}
+
+.title-brand svg {
+  color: #79e2a5;
+}
+
+.window-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.content {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.login-screen .content {
+  padding-top: 32px;
+}
+
+.login-mark {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.login-mark svg {
+  color: #237a4b;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+p,
+label,
+.operator-row span {
+  color: #5f7068;
+  font-size: 13px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+}
+
+input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #c4d0c8;
+  border-radius: 6px;
+  padding: 0 10px;
+  outline: none;
+  color: #17211c;
+  background: #ffffff;
+}
+
+input:focus {
+  border-color: #237a4b;
+  box-shadow: 0 0 0 3px rgba(35, 122, 75, 0.12);
+}
+
+.password-field {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  border: 1px solid #c4d0c8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.password-field input {
+  border: 0;
+  box-shadow: none;
+}
+
+.password-field button {
+  border: 0;
+  background: transparent;
+  color: #5f7068;
+}
+
+.primary {
+  min-height: 42px;
+  border: 0;
+  border-radius: 6px;
+  background: #237a4b;
+  color: #ffffff;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.primary:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.verifier-content {
+  gap: 10px;
+}
+
+.operator-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #dbe4de;
+  border-radius: 6px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.operator-row div {
+  display: grid;
+  gap: 2px;
+}
+
+.operator-row svg {
+  color: #237a4b;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.verify-button {
+  margin-top: 2px;
+}
+
+.error {
+  border: 1px solid #e9aca8;
+  background: #fff0ef;
+  color: #862a22;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+
+.result {
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d8e2dc;
+  background: #ffffff;
+}
+
+.result strong {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.result span {
+  color: #4f5f57;
+  font-size: 13px;
+}
+
+.result-verified {
+  border-color: #8bd0a6;
+  background: #effbf3;
+}
+
+.result-not-found,
+.result-amount-mismatch,
+.result-error {
+  border-color: #eda5a0;
+  background: #fff2f1;
+}
+
+.result-pending {
+  border-color: #e6c45a;
+  background: #fff8df;
+}
+
+.result-already-verified {
+  border-color: #9db9e9;
+  background: #f1f6ff;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0 0;
+}
+
+dl div {
+  display: grid;
+  gap: 2px;
+}
+
+dt {
+  color: #69786f;
+  font-size: 11px;
+}
+
+dd {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

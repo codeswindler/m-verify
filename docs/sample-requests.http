@@ -1,0 +1,190 @@
+@baseUrl = http://localhost:4000
+@accessToken = replace-with-access-token
+@refreshToken = replace-with-refresh-token
+@darajaSecret = change-me-callback-secret
+@tenantId = 1
+@tenantSlug = default-business
+
+### Health
+GET {{baseUrl}}/health
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123",
+  "deviceId": "desktop-demo-device-001",
+  "deviceName": "Cashier Windows PC"
+}
+
+### Refresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}",
+  "deviceId": "desktop-demo-device-001"
+}
+
+### Lookup received payment by reference
+POST {{baseUrl}}/verify-payment/lookup
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reference": "ORDER-102"
+}
+
+### Lookup received payment with optional amount cross-check
+POST {{baseUrl}}/verify-payment/lookup
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reference": "ORDER-102",
+  "amount": 850
+}
+
+### Verify payment formally
+POST {{baseUrl}}/verify-payment
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reference": "ORDER-102"
+}
+
+### Search transactions
+GET {{baseUrl}}/transactions?search=RBA123ABC1&page=1&limit=25
+Authorization: Bearer {{accessToken}}
+
+### Transaction detail
+GET {{baseUrl}}/transactions/1
+Authorization: Bearer {{accessToken}}
+
+### Verification logs
+GET {{baseUrl}}/verification-logs?page=1&limit=25
+Authorization: Bearer {{accessToken}}
+
+### Export transactions CSV
+GET {{baseUrl}}/transactions/export.csv
+Authorization: Bearer {{accessToken}}
+
+### Export logs CSV
+GET {{baseUrl}}/verification-logs/export.csv
+Authorization: Bearer {{accessToken}}
+
+### Create user
+POST {{baseUrl}}/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "username": "waiter1",
+  "fullName": "Waiter One",
+  "role": "waiter",
+  "password": "waiter1234",
+  "tenantId": 1
+}
+
+### Disable user
+PATCH {{baseUrl}}/users/2
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "disabled": true
+}
+
+### List businesses
+GET {{baseUrl}}/tenants
+Authorization: Bearer {{accessToken}}
+
+### Create business
+POST {{baseUrl}}/tenants
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Alvo Maxi Club",
+  "slug": "alvo-maxi-club",
+  "contactEmail": "accounts@example.com",
+  "contactPhone": "+254700000000"
+}
+
+### Get business M-Pesa settings and callback URLs
+GET {{baseUrl}}/tenants/{{tenantId}}/mpesa
+Authorization: Bearer {{accessToken}}
+
+### Save business M-Pesa credentials
+PUT {{baseUrl}}/tenants/{{tenantId}}/mpesa
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "environment": "production",
+  "businessShortCode": "600000",
+  "tillNumber": "600000",
+  "consumerKey": "daraja-consumer-key",
+  "consumerSecret": "daraja-consumer-secret",
+  "passkey": "daraja-passkey",
+  "callbackSecret": "tenant-callback-secret-123",
+  "active": true
+}
+
+### Daraja validation callback
+POST {{baseUrl}}/mpesa/c2b/validation
+X-M-Verify-Callback-Secret: {{darajaSecret}}
+Content-Type: application/json
+
+{
+  "TransID": "RBA123ABC9",
+  "TransAmount": "900.00",
+  "MSISDN": "254712345678",
+  "BillRefNumber": "Table 9",
+  "TransTime": "20260703140520"
+}
+
+### Tenant Daraja validation callback
+POST {{baseUrl}}/mpesa/{{tenantSlug}}/c2b/validation
+X-M-Verify-Callback-Secret: {{darajaSecret}}
+Content-Type: application/json
+
+{
+  "TransID": "RBA123ABT1",
+  "TransAmount": "900.00",
+  "MSISDN": "HASHED-PAYER-ABC123XYZ",
+  "BillRefNumber": "Table 9",
+  "TransTime": "20260703140520",
+  "BusinessShortCode": "600000"
+}
+
+### Daraja confirmation callback
+POST {{baseUrl}}/mpesa/c2b/confirmation
+X-M-Verify-Callback-Secret: {{darajaSecret}}
+Content-Type: application/json
+
+{
+  "TransID": "RBA123ABC9",
+  "TransAmount": "900.00",
+  "MSISDN": "254712345678",
+  "BillRefNumber": "Table 9",
+  "TransTime": "20260703140520",
+  "BusinessShortCode": "600000"
+}
+
+### Tenant Daraja confirmation callback
+POST {{baseUrl}}/mpesa/{{tenantSlug}}/c2b/confirmation
+X-M-Verify-Callback-Secret: {{darajaSecret}}
+Content-Type: application/json
+
+{
+  "TransID": "RBA123ABT1",
+  "TransAmount": "900.00",
+  "MSISDN": "254712345678",
+  "BillRefNumber": "Table 9",
+  "TransTime": "20260703140520",
+  "BusinessShortCode": "600000"
+}

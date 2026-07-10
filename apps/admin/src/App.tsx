@@ -1,0 +1,1135 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Building2,
+  CheckCircle2,
+  Copy,
+  Download,
+  Eye,
+  KeyRound,
+  LogOut,
+  ReceiptText,
+  RefreshCw,
+  Save,
+  Search,
+  ShieldCheck,
+  UserPlus,
+  Users as UsersIcon,
+  WalletCards,
+  X
+} from "lucide-react";
+import type {
+  AuthResponse,
+  MpesaCredentialSummary,
+  PaginatedResponse,
+  PaymentLookupResponse,
+  PaymentSummary,
+  TenantSummary,
+  VerificationResponse
+} from "@m-verify/shared";
+import {
+  api,
+  API_BASE_URL,
+  downloadCsv,
+  type AdminUser,
+  type CreateTenantPayload,
+  type CreateUserPayload,
+  type PlatformDashboard,
+  type UpdateTenantPayload,
+  type UpsertMpesaCredentialPayload
+} from "./api";
+import { MVerifyIcon, MVerifyLogo } from "./Logo";
+
+type Tab = "platform-dashboard" | "businesses" | "platform-users" | "verify" | "transactions" | "staff";
+const tokenKey = "mverify_admin_auth";
+type ToastTone = "success" | "error" | "info";
+type Notify = (title: string, message?: string, tone?: ToastTone) => void;
+
+function getDeviceId(): string {
+  const key = "mverify_admin_device_id";
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  localStorage.setItem(key, next);
+  return next;
+}
+
+function defaultTab(auth: AuthResponse | null): Tab {
+  if (!auth) return "verify";
+  return auth.user.role === "admin" ? "platform-dashboard" : "verify";
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatAmount(value: string | number): string {
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return "0";
+  return amount.toLocaleString("en-KE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function initials(name: string): string {
+  return name.split(" ").slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+}
+
+function StatusBadge({ value }: { value: string }) {
+  return <span className={`status status-${value.toLowerCase().replace(/_/g, "-")}`}>{value.replace(/_/g, " ")}</span>;
+}
+
+function LoginView({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("admin123");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const auth = await api.login({
+        username,
+        password,
+        deviceId: getDeviceId(),
+        deviceName: navigator.userAgent.slice(0, 80)
+      });
+      onLogin(auth);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <div className="login-brand">
+        <div className="login-brand-inner">
+          <span className="login-brand-tag">M-Pesa Verification System</span>
+          <MVerifyLogo height={54} />
+          <div>
+            <h2 className="login-brand-headline">Instant payment<br />verification for <span>your business</span></h2>
+            <p className="login-brand-sub" style={{ marginTop: 12 }}>
+              Verify M-Pesa transactions against live data in seconds.
+            </p>
+          </div>
+          <div className="login-brand-features">
+            {["Live transaction lookup", "Staff access control", "Business revenue tracking"].map((text) => (
+              <div className="login-brand-feature" key={text}>
+                <span className="login-brand-feature-dot">✓</span>
+                {text}
+              </div>
+            ))}
+          </div>
+          <p className="login-brand-footer">© {new Date().getFullYear()} M-Verify · v0.1.0</p>
+        </div>
+      </div>
+      <div className="login-form-side">
+        <form className="login-form-card" onSubmit={submit}>
+          <div className="login-form-header">
+            <h2>Welcome back</h2>
+            <p>Sign in to continue</p>
+          </div>
+          <div className="login-fields">
+            <label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" /></label>
+            <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" /></label>
+          </div>
+          {error && <div className="error">{error}</div>}
+          <button className="primary login-sign-btn" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
+          <p className="login-footnote">{API_BASE_URL}</p>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+type ToastItem =
+  | { id: string; kind: "payment"; tx: PaymentSummary; exiting: boolean }
+  | { id: string; kind: "notice"; title: string; message?: string; tone: ToastTone; exiting: boolean };
+const toastDurationMs = 5200;
+
+function useTransactionPoller(token: string | null, enabled: boolean, onNew: (tx: PaymentSummary) => void) {
+  const lastMaxId = useRef<number | null>(null);
+  const onNewRef = useRef(onNew);
+  useEffect(() => { onNewRef.current = onNew; });
+
+  useEffect(() => {
+    if (!token || !enabled) {
+      lastMaxId.current = null;
+      return;
+    }
+    const accessToken = token;
+    let cancelled = false;
+    async function poll() {
+      if (cancelled) return;
+      try {
+        const result = await api.listTransactions(accessToken, new URLSearchParams({ page: "1", limit: "10" }));
+        const rows = result.data;
+        if (!rows.length) return;
+        const maxId = Math.max(...rows.map((row) => row.id));
+        if (lastMaxId.current === null) {
+          lastMaxId.current = maxId;
+          return;
+        }
+        const fresh = rows.filter((row) => row.id > lastMaxId.current!).slice(0, 3);
+        if (fresh.length) {
+          lastMaxId.current = Math.max(...fresh.map((row) => row.id));
+          fresh.reverse().forEach((tx) => onNewRef.current(tx));
+        }
+      } catch {
+        // Ignore polling noise; visible screens show their own request errors.
+      }
+    }
+    poll();
+    const timer = setInterval(poll, 7000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [token, enabled]);
+}
+
+function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: string) => void }) {
+  if (!toasts.length) return null;
+  return (
+    <div className="toast-container" aria-label="Notifications">
+      {toasts.map((item) => (
+        <div
+          key={item.id}
+          role="alert"
+          className={`toast-card toast-${item.kind}${item.kind === "notice" ? ` toast-${item.tone}` : ""}${item.exiting ? " toast-exiting" : ""}`}
+          style={{ "--toast-duration": `${toastDurationMs}ms` } as React.CSSProperties}
+        >
+          {item.kind === "payment" ? (
+            <>
+              <div className="toast-header">
+                <div className="toast-icon"><ReceiptText size={15} /></div>
+                <span className="toast-label">New M-Pesa Payment</span>
+              </div>
+              <div className="toast-body">
+                <div className="toast-phone">{item.tx.phoneNumber}</div>
+                <div className="toast-amount">KES {formatAmount(item.tx.amount)}</div>
+                <div className="toast-code">{item.tx.reference ?? item.tx.transactionCode}</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="toast-header">
+                <div className="toast-icon"><CheckCircle2 size={15} /></div>
+                <span className="toast-label">{item.tone}</span>
+              </div>
+              <div className="toast-notice-body">
+                <strong>{item.title}</strong>
+                {item.message && <span>{item.message}</span>}
+              </div>
+            </>
+          )}
+          <button className="toast-close" onClick={() => onDismiss(item.id)} aria-label="Dismiss notification"><X size={13} /></button>
+          <div className="toast-progress"><div className="toast-progress-bar" /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+  return (
+    <div className="kpi-card">
+      <div className="kpi-icon">{icon}</div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PlatformDashboardView({ token }: { token: string }) {
+  const [dashboard, setDashboard] = useState<PlatformDashboard | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setDashboard(await api.platformDashboard(token));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  return (
+    <>
+      <div className="section-header">
+        <h2>Platform Dashboard</h2>
+        <button onClick={load} disabled={loading}><RefreshCw size={14} /> Refresh</button>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <div className="kpi-grid">
+        <KpiCard label="Businesses" value={String(dashboard?.kpis.businesses ?? 0)} icon={<Building2 size={18} />} />
+        <KpiCard label="Active Businesses" value={String(dashboard?.kpis.activeBusinesses ?? 0)} icon={<ShieldCheck size={18} />} />
+        <KpiCard label="Platform Revenue" value={`KES ${formatAmount(dashboard?.kpis.platformRevenue ?? 0)}`} icon={<WalletCards size={18} />} />
+        <KpiCard label="Today Earned" value={`KES ${formatAmount(dashboard?.kpis.todayPlatformRevenue ?? 0)}`} icon={<CheckCircle2 size={18} />} />
+      </div>
+      <section className="panel">
+        <div className="section-header compact">
+          <h2>Revenue Breakdown</h2>
+          <span className="section-badge">commission</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Business</th><th>Commission</th><th>Transactions</th><th>Payment Volume</th><th>Earned</th><th>Last Payment</th></tr>
+            </thead>
+            <tbody>
+              {!dashboard?.breakdown.length ? (
+                <EmptyRow label="No businesses yet" />
+              ) : dashboard.breakdown.map((row) => (
+                <tr key={row.businessId}>
+                  <td><strong>{row.businessName}</strong><span className="subtext">{row.slug}</span></td>
+                  <td>{row.commissionRatePct}%</td>
+                  <td>{row.transactionCount.toLocaleString()}</td>
+                  <td>KES {formatAmount(row.totalPaymentVolume)}</td>
+                  <td className="cell-amount">KES {formatAmount(row.platformRevenue)}</td>
+                  <td className="cell-muted">{formatDate(row.lastPaymentAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function emptyMpesaForm(): UpsertMpesaCredentialPayload {
+  return {
+    environment: "production",
+    businessShortCode: "",
+    tillNumber: "",
+    consumerKey: "",
+    consumerSecret: "",
+    passkey: "",
+    callbackSecret: "",
+    active: true
+  };
+}
+
+function emptyBusinessForm(): CreateTenantPayload {
+  return {
+    name: "",
+    slug: "",
+    commissionRatePct: 0,
+    contactEmail: "",
+    contactPhone: ""
+  };
+}
+
+function businessToForm(business: TenantSummary): UpdateTenantPayload {
+  return {
+    name: business.name,
+    slug: business.slug,
+    commissionRatePct: Number(business.commissionRatePct),
+    contactEmail: business.contactEmail ?? "",
+    contactPhone: business.contactPhone ?? "",
+    status: business.status
+  };
+}
+
+function cleanBusinessPayload(form: CreateTenantPayload | UpdateTenantPayload): CreateTenantPayload | UpdateTenantPayload {
+  return {
+    ...form,
+    slug: form.slug?.trim() || undefined,
+    commissionRatePct: Number(form.commissionRatePct ?? 0),
+    contactEmail: form.contactEmail?.trim() ?? "",
+    contactPhone: form.contactPhone?.trim() ?? ""
+  };
+}
+
+type BusinessPanel = "edit" | "staff" | "mpesa";
+
+function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
+  const [businesses, setBusinesses] = useState<TenantSummary[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [selectedBusinessId, setSelectedBusinessId] = useState<number | null>(null);
+  const [activePanel, setActivePanel] = useState<BusinessPanel>("edit");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [businessForm, setBusinessForm] = useState<CreateTenantPayload>(() => emptyBusinessForm());
+  const [editForm, setEditForm] = useState<UpdateTenantPayload>(() => emptyBusinessForm());
+  const [staffForm, setStaffForm] = useState<CreateUserPayload>({
+    username: "",
+    fullName: "",
+    role: "waiter",
+    password: ""
+  });
+  const [mpesaForm, setMpesaForm] = useState<UpsertMpesaCredentialPayload>(() => emptyMpesaForm());
+  const [mpesaSettings, setMpesaSettings] = useState<MpesaCredentialSummary | null>(null);
+  const [callbackUrls, setCallbackUrls] = useState({ validationUrl: "", confirmationUrl: "" });
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const selectedBusiness = businesses.find((business) => business.id === selectedBusinessId) ?? null;
+  const businessUsers = users.filter((user) => user.tenantId === selectedBusinessId && user.role !== "admin");
+
+  async function loadBusinesses(nextSelectedId?: number | null) {
+    setError("");
+    const [businessResult, userResult] = await Promise.all([api.listTenants(token), api.listUsers(token)]);
+    setBusinesses(businessResult.data);
+    setUsers(userResult.data);
+    if (nextSelectedId !== undefined) {
+      setSelectedBusinessId(nextSelectedId);
+    } else if (selectedBusinessId && !businessResult.data.some((business) => business.id === selectedBusinessId)) {
+      setSelectedBusinessId(null);
+    }
+  }
+
+  async function loadMpesaSettings(businessId: number) {
+    const result = await api.getMpesaSettings(token, businessId);
+    setMpesaSettings(result.data);
+    setCallbackUrls(result.callbackUrls);
+    setMpesaForm({
+      environment: result.data?.environment ?? "production",
+      businessShortCode: result.data?.businessShortCode ?? "",
+      tillNumber: result.data?.tillNumber ?? "",
+      consumerKey: "",
+      consumerSecret: "",
+      passkey: "",
+      callbackSecret: "",
+      active: result.data?.active ?? true
+    });
+  }
+
+  useEffect(() => { void loadBusinesses(); }, []);
+  useEffect(() => {
+    if (selectedBusinessId) void loadMpesaSettings(selectedBusinessId);
+  }, [selectedBusinessId]);
+  useEffect(() => {
+    if (selectedBusiness) setEditForm(businessToForm(selectedBusiness));
+  }, [selectedBusinessId, selectedBusiness?.updatedAt]);
+
+  function openBusiness(business: TenantSummary, panel: BusinessPanel) {
+    setSelectedBusinessId(business.id);
+    setActivePanel(panel);
+    setEditForm(businessToForm(business));
+    setMessage("");
+    setError("");
+  }
+
+  async function createBusiness(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const business = await api.createTenant(token, cleanBusinessPayload(businessForm) as CreateTenantPayload);
+      setBusinessForm(emptyBusinessForm());
+      setShowCreateForm(false);
+      setActivePanel("edit");
+      setMessage("Business created.");
+      notify("Business created", `${business.name} is ready for setup.`);
+      await loadBusinesses(business.id);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not create business";
+      setError(messageText);
+      notify("Business was not created", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveBusiness(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedBusiness) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.updateTenant(token, selectedBusiness.id, cleanBusinessPayload(editForm) as UpdateTenantPayload);
+      setMessage("Business updated.");
+      notify("Business updated", selectedBusiness.name);
+      await loadBusinesses(selectedBusiness.id);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not update business";
+      setError(messageText);
+      notify("Business update failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleBusiness(business: TenantSummary) {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.updateTenant(token, business.id, { status: business.status === "active" ? "disabled" : "active" });
+      setMessage("Business updated.");
+      notify("Business updated", `${business.name} is now ${business.status === "active" ? "disabled" : "active"}.`);
+      await loadBusinesses(business.id);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not update business";
+      setError(messageText);
+      notify("Business update failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveMpesa(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedBusinessId) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await api.saveMpesaSettings(token, selectedBusinessId, mpesaForm);
+      setMpesaSettings(saved);
+      setCallbackUrls({ validationUrl: saved.validationUrl, confirmationUrl: saved.confirmationUrl });
+      setMpesaForm((current) => ({ ...current, consumerKey: "", consumerSecret: "", passkey: "", callbackSecret: "" }));
+      setMessage("M-Pesa settings saved.");
+      notify("M-Pesa settings saved", "Callback URLs and credentials are ready.");
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not save M-Pesa settings";
+      setError(messageText);
+      notify("M-Pesa settings failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createBusinessUser(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedBusiness) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.createUser(token, { ...staffForm, tenantId: selectedBusiness.id });
+      setStaffForm({ username: "", fullName: "", role: "waiter", password: "" });
+      setMessage("Business user created.");
+      notify("Business user created", staffForm.username);
+      await loadBusinesses(selectedBusiness.id);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not create business user";
+      setError(messageText);
+      notify("User creation failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleBusinessUser(user: AdminUser) {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.updateUser(token, user.id, { disabled: !user.disabled });
+      setMessage("Business user updated.");
+      notify("Business user updated", `${user.username} is now ${user.disabled ? "active" : "disabled"}.`);
+      await loadBusinesses(selectedBusinessId);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not update business user";
+      setError(messageText);
+      notify("User update failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetBusinessUserPassword(user: AdminUser) {
+    const password = window.prompt(`New password for ${user.username}`);
+    if (!password) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.updateUser(token, user.id, { password });
+      setMessage("Password reset.");
+      notify("Password reset", user.username);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not reset password";
+      setError(messageText);
+      notify("Password reset failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copyUrl(value: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage("Callback URL copied.");
+      notify("Callback URL copied", "Paste it into Daraja C2B settings.");
+    } catch {
+      window.prompt("Copy callback URL", value);
+      notify("Copy URL manually", "Clipboard access was blocked.", "info");
+    }
+  }
+
+  return (
+    <>
+      <div className="section-header">
+        <h2>Businesses</h2>
+        <button className="primary" onClick={() => setShowCreateForm((value) => !value)}><Building2 size={14} /> Create new business</button>
+      </div>
+      <section className="panel tenant-panel">
+        {(error || message) && <div className={error ? "error" : "notice"}>{error || message}</div>}
+        {showCreateForm && (
+          <form className="user-form create-business-form" onSubmit={createBusiness}>
+            <h2><Building2 size={16} /> Create business</h2>
+            <div className="form-grid two">
+              <label>Name<input value={businessForm.name} onChange={(event) => setBusinessForm({ ...businessForm, name: event.target.value })} /></label>
+              <label>Slug<input value={businessForm.slug ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, slug: event.target.value })} /></label>
+              <label>Commission %<input type="number" min="0" max="100" step="0.01" value={businessForm.commissionRatePct ?? 0} onChange={(event) => setBusinessForm({ ...businessForm, commissionRatePct: Number(event.target.value) })} /></label>
+              <label>Email<input value={businessForm.contactEmail ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactEmail: event.target.value })} /></label>
+              <label>Phone<input value={businessForm.contactPhone ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactPhone: event.target.value })} /></label>
+            </div>
+            <div className="actions"><button className="primary" disabled={loading}>Create business</button><button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button></div>
+          </form>
+        )}
+        <div className="business-grid">
+          {businesses.map((business) => {
+            const userCount = users.filter((user) => user.tenantId === business.id && user.role !== "admin").length;
+            return (
+              <article key={business.id} className={`business-card ${business.id === selectedBusinessId ? "active" : ""}`}>
+                <div className="business-card-head">
+                  <div><h3>{business.name}</h3><p>{business.slug}</p></div>
+                  <StatusBadge value={business.status} />
+                </div>
+                <div className="business-card-meta">
+                  <span>{business.commissionRatePct}% commission</span>
+                  <span>{userCount} business users</span>
+                  <span>{business.contactPhone || business.contactEmail || "No contact"}</span>
+                </div>
+                <div className="actions">
+                  <button type="button" onClick={() => openBusiness(business, "edit")}>Edit</button>
+                  <button type="button" onClick={() => openBusiness(business, "staff")}><UsersIcon size={13} /> Staff</button>
+                  <button type="button" onClick={() => openBusiness(business, "mpesa")}><KeyRound size={13} /> M-Pesa</button>
+                  <button type="button" onClick={() => void toggleBusiness(business)} disabled={loading}>{business.status === "active" ? "Disable" : "Enable"}</button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        {selectedBusiness ? (
+          <div className="business-detail">
+            <div className="tenant-heading">
+              <div><h3>{selectedBusiness.name}</h3><p>{activePanel === "edit" ? "Business details" : activePanel === "staff" ? "Business users" : "M-Pesa callbacks and credentials"}</p></div>
+              <div className="segmented-actions">
+                <button type="button" className={activePanel === "edit" ? "active" : ""} onClick={() => setActivePanel("edit")}>Details</button>
+                <button type="button" className={activePanel === "staff" ? "active" : ""} onClick={() => setActivePanel("staff")}>Staff</button>
+                <button type="button" className={activePanel === "mpesa" ? "active" : ""} onClick={() => setActivePanel("mpesa")}>M-Pesa</button>
+              </div>
+            </div>
+
+            {activePanel === "edit" && (
+              <form className="mpesa-form" onSubmit={saveBusiness}>
+                <div className="form-grid two">
+                  <label>Name<input value={editForm.name ?? ""} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /></label>
+                  <label>Slug<input value={editForm.slug ?? ""} onChange={(event) => setEditForm({ ...editForm, slug: event.target.value })} /></label>
+                  <label>Commission %<input type="number" min="0" max="100" step="0.01" value={editForm.commissionRatePct ?? 0} onChange={(event) => setEditForm({ ...editForm, commissionRatePct: Number(event.target.value) })} /></label>
+                  <label>Status<select value={editForm.status ?? "active"} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as TenantSummary["status"] })}><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
+                  <label>Email<input value={editForm.contactEmail ?? ""} onChange={(event) => setEditForm({ ...editForm, contactEmail: event.target.value })} /></label>
+                  <label>Phone<input value={editForm.contactPhone ?? ""} onChange={(event) => setEditForm({ ...editForm, contactPhone: event.target.value })} /></label>
+                </div>
+                <button className="primary" disabled={loading}><Save size={14} /> Save business</button>
+              </form>
+            )}
+
+            {activePanel === "staff" && (
+              <div className="business-staff">
+                <form className="user-form" onSubmit={createBusinessUser}>
+                  <h2><UserPlus size={16} /> Add business user</h2>
+                  <div className="form-grid two">
+                    <label>Username<input value={staffForm.username} onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })} /></label>
+                    <label>Full name<input value={staffForm.fullName} onChange={(event) => setStaffForm({ ...staffForm, fullName: event.target.value })} /></label>
+                    <label>Role<select value={staffForm.role} onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as CreateUserPayload["role"] })}><option value="waiter">Waiter</option><option value="manager">Business Admin</option></select></label>
+                    <label>Temporary password<input type="password" value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} /></label>
+                  </div>
+                  <button className="primary" disabled={loading}>Create business user</button>
+                </form>
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {!businessUsers.length ? <EmptyRow label="No business users yet" /> : businessUsers.map((user) => (
+                        <tr key={user.id}>
+                          <td><strong>{user.username}</strong><span className="subtext">{user.fullName}</span></td>
+                          <td><span className="status">{user.role === "manager" ? "business admin" : user.role}</span></td>
+                          <td><span className={`status ${user.disabled ? "status-failed" : "status-verified"}`}>{user.disabled ? "Disabled" : "Active"}</span></td>
+                          <td className="cell-muted">{formatDate(user.lastLoginAt)}</td>
+                          <td className="actions"><button onClick={() => void toggleBusinessUser(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetBusinessUserPassword(user)}>Reset pw</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activePanel === "mpesa" && (
+              <>
+                <div className="callback-grid">
+                  <label>Validation callback
+                    <div className="copy-field"><input readOnly value={callbackUrls.validationUrl} /><button type="button" onClick={() => void copyUrl(callbackUrls.validationUrl)} disabled={!callbackUrls.validationUrl} title="Copy validation callback URL"><Copy size={14} /> Copy</button></div>
+                  </label>
+                  <label>Confirmation callback
+                    <div className="copy-field"><input readOnly value={callbackUrls.confirmationUrl} /><button type="button" onClick={() => void copyUrl(callbackUrls.confirmationUrl)} disabled={!callbackUrls.confirmationUrl} title="Copy confirmation callback URL"><Copy size={14} /> Copy</button></div>
+                  </label>
+                </div>
+                <form className="mpesa-form" onSubmit={saveMpesa}>
+                  <h3><KeyRound size={16} /> M-Pesa credentials</h3>
+                  <div className="form-grid two">
+                    <label>Environment<select value={mpesaForm.environment} onChange={(event) => setMpesaForm({ ...mpesaForm, environment: event.target.value as UpsertMpesaCredentialPayload["environment"] })}><option value="production">Production</option><option value="sandbox">Sandbox</option></select></label>
+                    <label>Business shortcode<input value={mpesaForm.businessShortCode} onChange={(event) => setMpesaForm({ ...mpesaForm, businessShortCode: event.target.value })} /></label>
+                    <label>Till / paybill<input value={mpesaForm.tillNumber ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, tillNumber: event.target.value })} /></label>
+                    <label>Consumer key<input value={mpesaForm.consumerKey ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, consumerKey: event.target.value })} placeholder={mpesaSettings?.consumerKeyMasked ?? ""} /></label>
+                    <label>Consumer secret<input type="password" value={mpesaForm.consumerSecret ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, consumerSecret: event.target.value })} placeholder={mpesaSettings?.hasConsumerSecret ? "Configured" : ""} /></label>
+                    <label>Passkey<input type="password" value={mpesaForm.passkey ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, passkey: event.target.value })} placeholder={mpesaSettings?.hasPasskey ? "Configured" : ""} /></label>
+                    <label>Callback secret<input type="password" value={mpesaForm.callbackSecret ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, callbackSecret: event.target.value })} placeholder={mpesaSettings?.callbackSecretHint ?? ""} /></label>
+                    <label className="check-row"><input type="checkbox" checked={mpesaForm.active} onChange={(event) => setMpesaForm({ ...mpesaForm, active: event.target.checked })} /><span>Callbacks active</span></label>
+                  </div>
+                  <button className="primary" disabled={loading}><Save size={14} /> Save M-Pesa settings</button>
+                </form>
+              </>
+            )}
+          </div>
+        ) : <div className="empty-state"><p>Select a business card to edit details, staff, or M-Pesa settings.</p></div>}
+      </section>
+    </>
+  );
+}
+
+function EmptyRow({ label }: { label: string }) {
+  return <tr><td colSpan={99}><div className="empty-state"><p>{label}</p></div></td></tr>;
+}
+
+function PaymentDetailModal({ payment, onClose }: { payment: PaymentSummary; onClose: () => void }) {
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="payment-detail-title">
+        <div className="modal-header">
+          <div>
+            <span className="section-badge">Payment</span>
+            <h2 id="payment-detail-title">{payment.reference ?? payment.transactionCode}</h2>
+            <p>{payment.customerName ?? "M-Pesa payer"}</p>
+          </div>
+          <button className="icon-only" type="button" onClick={onClose} aria-label="Close payment details"><X size={16} /></button>
+        </div>
+
+        <div className="modal-kpi-row">
+          <div><span>Amount received</span><strong>KES {formatAmount(payment.amount)}</strong></div>
+          <div><span>Status</span><StatusBadge value={payment.status} /></div>
+          <div><span>Formal verification</span><strong>{payment.verifiedStatus ? "Verified" : "Not verified"}</strong></div>
+        </div>
+
+        <dl className="payment-details modal-details">
+          <div><dt>Customer</dt><dd>{payment.customerName ?? "M-Pesa payer"}</dd></div>
+          <div><dt>Phone / payer ID</dt><dd>{payment.phoneNumber}</dd></div>
+          <div><dt>Reference</dt><dd>{payment.reference ?? "-"}</dd></div>
+          <div><dt>M-Pesa code</dt><dd className="mono-value">{payment.transactionCode}</dd></div>
+          <div><dt>Channel</dt><dd>{payment.paymentChannel}</dd></div>
+          <div><dt>Received at</dt><dd>{formatDate(payment.paymentTime)}</dd></div>
+          <div><dt>Verified by</dt><dd>{payment.verifiedBy?.username ?? "-"}</dd></div>
+          <div><dt>Verified at</dt><dd>{formatDate(payment.verifiedAt)}</dd></div>
+        </dl>
+
+        <div className="modal-footer">
+          <button type="button" onClick={onClose}>Close</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TransactionsView({ token, notify }: { token: string; notify: Notify }) {
+  const [search, setSearch] = useState("");
+  const [result, setResult] = useState<PaginatedResponse<PaymentSummary> | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const params = useMemo(() => {
+    const query = new URLSearchParams({ page: "1", limit: "25" });
+    if (search) query.set("search", search);
+    return query;
+  }, [search]);
+
+  async function load(showNotice = false) {
+    setLoading(true);
+    setError("");
+    try {
+      setResult(await api.listTransactions(token, params));
+      if (showNotice) notify("Transactions refreshed", "Latest received payments loaded.");
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not load transactions";
+      setError(messageText);
+      notify("Transactions failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, [params.toString()]);
+  const rows = result?.data ?? [];
+
+  return (
+    <>
+      <div className="section-header">
+        <h2>Transactions</h2>
+        {result && <span className="section-badge">{result.total.toLocaleString()} records</span>}
+      </div>
+      <section className="panel">
+        <div className="toolbar">
+          <div className="searchbox"><Search size={15} /><input placeholder="Search name, reference, code, or phone" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+          <button onClick={() => void load(true)} disabled={loading}><RefreshCw size={14} /> Refresh</button>
+          <button onClick={() => { downloadCsv(token, `/transactions/export.csv?${params.toString()}`); notify("CSV export started", "Your transactions report is downloading.", "info"); }}><Download size={14} /> Export CSV</button>
+        </div>
+        {error && <div className="error">{error}</div>}
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Customer</th><th>Reference</th><th>Transaction Code</th><th>Amount</th><th>Received</th><th>Verified</th><th>Payment Time</th><th>Verified By</th><th>Actions</th></tr></thead>
+            <tbody>
+              {!rows.length ? <EmptyRow label="No transactions found" /> : rows.map((payment) => (
+                <tr key={payment.id}>
+                  <td><strong>{payment.customerName ?? payment.phoneNumber}</strong><span className="subtext">{payment.customerName ? payment.phoneNumber : "M-Pesa payer"}</span></td>
+                  <td>{payment.reference ?? "-"}</td>
+                  <td><span className="mono">{payment.transactionCode}</span></td>
+                  <td className="cell-amount">KES {formatAmount(payment.amount)}</td>
+                  <td><StatusBadge value="PAID" /></td>
+                  <td><span className={payment.verifiedStatus ? "cell-success" : "cell-muted-s"}>{payment.verifiedStatus ? "Yes" : "No"}</span></td>
+                  <td className="cell-muted">{formatDate(payment.paymentTime)}</td>
+                  <td className="cell-muted">{payment.verifiedBy?.username ?? "-"}</td>
+                  <td className="actions"><button type="button" onClick={() => setSelectedPayment(payment)}><Eye size={13} /> View</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {selectedPayment && <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />}
+    </>
+  );
+}
+
+function VerifyView({ token, notify }: { token: string; notify: Notify }) {
+  const [form, setForm] = useState({ phoneNumber: "", transactionCode: "", amount: "", reference: "" });
+  const [lookup, setLookup] = useState<PaymentLookupResponse | null>(null);
+  const [result, setResult] = useState<VerificationResponse | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const hasIdentifier = Boolean(form.phoneNumber.trim() || form.transactionCode.trim() || form.reference.trim());
+  const amountIsValid = !form.amount.trim() || Number(form.amount) > 0;
+  const canSearch = hasIdentifier && amountIsValid;
+
+  function payload() {
+    const amount = form.amount.trim();
+    return {
+      phoneNumber: form.phoneNumber.trim() || undefined,
+      transactionCode: form.transactionCode.trim() || undefined,
+      amount: amount ? Number(amount) : undefined,
+      reference: form.reference.trim() || undefined
+    };
+  }
+
+  async function searchPayment(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setResult(null);
+    setLookup(null);
+    setLoading(true);
+    try {
+      const lookupResult = await api.lookupPayment(token, payload());
+      setLookup(lookupResult);
+      if (lookupResult.found && lookupResult.amountMatches !== false) {
+        notify("Received payment found", lookupResult.payment ? `KES ${formatAmount(lookupResult.payment.amount)} · ${lookupResult.payment.reference ?? lookupResult.payment.transactionCode}` : lookupResult.message);
+      } else {
+        notify(lookupResult.found ? "Amount mismatch" : "Payment not found", lookupResult.message, lookupResult.found ? "error" : "info");
+      }
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Payment search failed";
+      setError(messageText);
+      notify("Payment search failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function verifyFoundPayment() {
+    setError("");
+    setResult(null);
+    setLoading(true);
+    try {
+      const verification = await api.verifyPayment(token, payload());
+      setResult(verification);
+      notify(
+        verification.result === "VERIFIED" ? "Payment verified" : verification.result.replace(/_/g, " "),
+        verification.message,
+        verification.result === "VERIFIED" ? "success" : verification.result === "ALREADY_VERIFIED" ? "info" : "error"
+      );
+      setLookup((current) => current?.payment ? {
+        ...current,
+        alreadyVerified: verification.result === "VERIFIED" || verification.result === "ALREADY_VERIFIED",
+        payment: verification.payment ?? current.payment
+      } : current);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Verification failed";
+      setError(messageText);
+      notify("Verification failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="section-header"><h2>Verify Payment</h2></div>
+      <section className="panel verify-panel">
+        <form className="verify-form" onSubmit={searchPayment}>
+          <label>Reference code<input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} placeholder="Table, order, account, or bill ref" /></label>
+          <label>M-Pesa code<input value={form.transactionCode} onChange={(event) => setForm({ ...form, transactionCode: event.target.value.toUpperCase() })} /></label>
+          <label>Expected amount<input type="number" min="1" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="Optional" /></label>
+          <label>Phone number<input value={form.phoneNumber} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} placeholder="Optional when using paybill reference" /></label>
+          <button className="primary" disabled={loading || !canSearch}>{loading ? "Searching..." : "Search received payment"}</button>
+        </form>
+        {error && <div className="error">{error}</div>}
+        {lookup && (
+          <div className={`result-card ${lookup.found && lookup.amountMatches !== false ? "result-verified" : "result-amount-mismatch"}`}>
+            <strong>{lookup.message}</strong>
+            {lookup.payment && (
+              <dl className="payment-details">
+                <div><dt>Customer</dt><dd>{lookup.payment.customerName ?? "M-Pesa payer"}</dd></div>
+                <div><dt>Reference</dt><dd>{lookup.payment.reference ?? "-"}</dd></div>
+                <div><dt>M-Pesa code</dt><dd>{lookup.payment.transactionCode}</dd></div>
+                <div><dt>Amount received</dt><dd>KES {formatAmount(lookup.payment.amount)}</dd></div>
+                <div><dt>Phone</dt><dd>{lookup.payment.phoneNumber}</dd></div>
+                <div><dt>Received at</dt><dd>{formatDate(lookup.payment.paymentTime)}</dd></div>
+                <div><dt>Formal verification</dt><dd>{lookup.payment.verifiedStatus ? `Verified by ${lookup.payment.verifiedBy?.username ?? "staff"}` : "Not yet verified"}</dd></div>
+              </dl>
+            )}
+            {lookup.found && lookup.amountMatches !== false && !lookup.alreadyVerified && (
+              <button className="primary" type="button" onClick={() => void verifyFoundPayment()} disabled={loading}>Verify formally</button>
+            )}
+          </div>
+        )}
+        {result && (
+          <div className={`result-card result-${result.result.toLowerCase().replace(/_/g, "-")}`}>
+            <StatusBadge value={result.result} />
+            <strong>{result.message}</strong>
+            {result.payment && <span>{result.payment.reference ?? result.payment.transactionCode} - KES {formatAmount(result.payment.amount)}</span>}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
+  const token = auth.accessToken;
+  const isPlatform = auth.user.role === "admin";
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState<CreateUserPayload>({
+    username: "",
+    fullName: "",
+    role: isPlatform ? "admin" : "waiter",
+    password: "",
+    tenantId: auth.user.tenantId ?? undefined
+  });
+  const visibleUsers = isPlatform ? users.filter((user) => user.role === "admin") : users.filter((user) => user.role !== "admin");
+
+  async function load() {
+    setError("");
+    try {
+      const userResult = await api.listUsers(token);
+      setUsers(userResult.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load users");
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function createUser(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    try {
+      await api.createUser(token, isPlatform ? { ...form, role: "admin", tenantId: undefined } : { ...form, tenantId: auth.user.tenantId ?? undefined });
+      notify(isPlatform ? "Admin user created" : "Staff user created", form.username);
+      setForm({ username: "", fullName: "", role: isPlatform ? "admin" : "waiter", password: "", tenantId: auth.user.tenantId ?? undefined });
+      await load();
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not create user";
+      setError(messageText);
+      notify("User creation failed", messageText, "error");
+    }
+  }
+
+  async function toggleDisabled(user: AdminUser) {
+    try {
+      await api.updateUser(token, user.id, { disabled: !user.disabled });
+      notify("User updated", `${user.username} is now ${user.disabled ? "active" : "disabled"}.`);
+      await load();
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not update user";
+      setError(messageText);
+      notify("User update failed", messageText, "error");
+    }
+  }
+
+  async function resetPassword(user: AdminUser) {
+    const password = window.prompt(`New password for ${user.username}`);
+    if (!password) return;
+    try {
+      await api.updateUser(token, user.id, { password });
+      notify("Password reset", user.username);
+      await load();
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not reset password";
+      setError(messageText);
+      notify("Password reset failed", messageText, "error");
+    }
+  }
+
+  return (
+    <>
+      <div className="section-header">
+        <h2>{isPlatform ? "Admin Users" : "Staff Access"}</h2>
+        <span className="section-badge">{visibleUsers.length} users</span>
+      </div>
+      <section className="panel split-panel">
+        <form className="user-form" onSubmit={createUser}>
+          <h2><UserPlus size={16} /> {isPlatform ? "Add admin user" : "Add staff user"}</h2>
+          {error && <div className="error">{error}</div>}
+          <label>Username<input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
+          <label>Full name<input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></label>
+          {isPlatform ? (
+            <label>Role<input value="Platform Admin" disabled /></label>
+          ) : (
+            <label>Role<select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as CreateUserPayload["role"] })}>
+              <option value="waiter">Waiter</option>
+              <option value="manager">Business Admin</option>
+            </select></label>
+          )}
+          <label>Temporary password<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+          <button className="primary">{isPlatform ? "Create admin" : "Create staff user"}</button>
+        </form>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+            <tbody>
+              {!visibleUsers.length ? <EmptyRow label="No users found" /> : visibleUsers.map((user) => (
+                <tr key={user.id}>
+                  <td><strong>{user.username}</strong><span className="subtext">{user.fullName}</span></td>
+                  <td><span className="status">{user.role === "admin" ? "platform admin" : user.role === "manager" ? "business admin" : user.role}</span></td>
+                  <td><span className={`status ${user.disabled ? "status-failed" : "status-verified"}`}>{user.disabled ? "Disabled" : "Active"}</span></td>
+                  <td className="cell-muted">{formatDate(user.lastLoginAt)}</td>
+                  <td className="actions"><button onClick={() => void toggleDisabled(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetPassword(user)}>Reset pw</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function App() {
+  const [auth, setAuth] = useState<AuthResponse | null>(() => {
+    const raw = localStorage.getItem(tokenKey);
+    return raw ? (JSON.parse(raw) as AuthResponse) : null;
+  });
+  const [tab, setTab] = useState<Tab>(() => defaultTab(auth));
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  function saveAuth(next: AuthResponse) {
+    localStorage.setItem(tokenKey, JSON.stringify(next));
+    setAuth(next);
+    setTab(defaultTab(next));
+  }
+
+  function logout() {
+    localStorage.removeItem(tokenKey);
+    setAuth(null);
+    setTab("verify");
+  }
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((current) => current.map((item) => item.id === id ? { ...item, exiting: true } : item));
+    setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 350);
+  }, []);
+
+  const addPaymentToast = useCallback((tx: PaymentSummary) => {
+    const id = `${tx.id}-${Date.now()}`;
+    const nextToast: ToastItem = { id, kind: "payment", tx, exiting: false };
+    setToasts((current) => [nextToast, ...current].slice(0, 5));
+    window.setTimeout(() => dismissToast(id), toastDurationMs);
+  }, [dismissToast]);
+
+  const notify = useCallback<Notify>((title, message, tone = "success") => {
+    const id = `notice-${crypto.randomUUID()}`;
+    const nextToast: ToastItem = { id, kind: "notice", title, message, tone, exiting: false };
+    setToasts((current) => [nextToast, ...current].slice(0, 5));
+    window.setTimeout(() => dismissToast(id), toastDurationMs);
+  }, [dismissToast]);
+
+  useTransactionPoller(auth?.accessToken ?? null, auth?.user.role === "manager", addPaymentToast);
+
+  if (!auth) return <LoginView onLogin={saveAuth} />;
+  const isPlatform = auth.user.role === "admin";
+  const title = isPlatform ? "M-Verify Platform" : auth.user.tenantName ?? "Business Portal";
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand-lockup">
+          <MVerifyIcon size={34} />
+          <div className="brand-lockup-text"><h1>{title}</h1><p>{auth.user.fullName} - {auth.user.role === "manager" ? "business admin" : auth.user.role}</p></div>
+        </div>
+        <nav className="topnav">
+          {isPlatform ? (
+            <>
+              <button className={tab === "platform-dashboard" ? "active" : ""} onClick={() => setTab("platform-dashboard")}>Dashboard</button>
+              <button className={tab === "businesses" ? "active" : ""} onClick={() => setTab("businesses")}>Businesses</button>
+              <button className={tab === "platform-users" ? "active" : ""} onClick={() => setTab("platform-users")}>Admin Users</button>
+            </>
+          ) : (
+            <>
+              <button className={tab === "verify" ? "active" : ""} onClick={() => setTab("verify")}>Verify</button>
+              {auth.user.role === "manager" && <button className={tab === "transactions" ? "active" : ""} onClick={() => setTab("transactions")}>Transactions</button>}
+              {auth.user.role === "manager" && <button className={tab === "staff" ? "active" : ""} onClick={() => setTab("staff")}>Staff</button>}
+            </>
+          )}
+        </nav>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="user-avatar" title={auth.user.fullName}>{initials(auth.user.fullName)}</div>
+          <button className="signout-btn" onClick={logout}><LogOut size={13} /> Sign out</button>
+        </div>
+      </header>
+      <div className="content-area">
+        {tab === "platform-dashboard" && <PlatformDashboardView token={auth.accessToken} />}
+        {tab === "businesses" && <BusinessesView token={auth.accessToken} notify={notify} />}
+        {tab === "platform-users" && <UsersView auth={auth} notify={notify} />}
+        {tab === "verify" && <VerifyView token={auth.accessToken} notify={notify} />}
+        {tab === "transactions" && <TransactionsView token={auth.accessToken} notify={notify} />}
+        {tab === "staff" && <UsersView auth={auth} notify={notify} />}
+      </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </main>
+  );
+}

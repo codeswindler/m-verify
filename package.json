@@ -1,0 +1,20 @@
+{
+  "name": "m-verify",
+  "private": true,
+  "version": "0.1.0",
+  "description": "M-Verify payment verification desktop app, API, admin panel, and database schema.",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @m-verify/api dev",
+    "dev:admin": "pnpm --filter @m-verify/admin dev",
+    "dev:desktop": "pnpm --filter @m-verify/desktop tauri:dev",
+    "build": "pnpm --filter @m-verify/shared build && pnpm --filter @m-verify/api build && pnpm --filter @m-verify/admin build && pnpm --filter @m-verify/desktop build:web",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @m-verify/api test",
+    "db:migrate": "pnpm --filter @m-verify/api db:migrate",
+    "db:seed": "pnpm --filter @m-verify/api db:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
