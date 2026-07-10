@@ -1,4 +1,4 @@
-import type { AuthResponse, VerificationResponse } from "@m-verify/shared";
+import type { AuthResponse, PaginatedResponse, PaymentSummary, SafeUser, VerificationResponse } from "@m-verify/shared";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 
@@ -7,6 +7,23 @@ export type DesktopUpdateInfo = {
   downloadUrl: string;
   releaseNotes?: string;
   mandatory?: boolean;
+};
+
+export type BusinessDashboard = {
+  kpis: {
+    paidTransactions: number;
+    totalPaymentVolume: string;
+    todayPaymentVolume: string;
+    verifiedTransactions: number;
+    staffUsers: number;
+    activeStaffUsers: number;
+  };
+  recentPayments: PaymentSummary[];
+};
+
+export type DesktopUser = SafeUser & {
+  lastLoginAt?: string | null;
+  createdAt?: string;
 };
 
 type RequestOptions = {
@@ -50,6 +67,21 @@ export const api = {
   },
   login(payload: { username: string; password: string; deviceId: string; deviceName?: string }) {
     return request<AuthResponse>("/auth/login", { method: "POST", body: payload });
+  },
+  businessDashboard(token: string) {
+    return request<BusinessDashboard>("/business/dashboard", { token });
+  },
+  listTransactions(token: string, params: URLSearchParams) {
+    return request<PaginatedResponse<PaymentSummary>>(`/transactions?${params.toString()}`, { token });
+  },
+  listUsers(token: string) {
+    return request<{ data: DesktopUser[] }>("/users", { token });
+  },
+  createUser(token: string, payload: { username: string; fullName: string; role: "manager" | "waiter"; password: string }) {
+    return request<SafeUser>("/users", { method: "POST", token, body: payload });
+  },
+  updateUser(token: string, id: number, payload: { disabled?: boolean; password?: string }) {
+    return request<SafeUser>(`/users/${id}`, { method: "PATCH", token, body: payload });
   },
   verifyPayment(
     token: string,

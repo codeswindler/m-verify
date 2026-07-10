@@ -7,6 +7,7 @@ import { pingDatabase } from "./db.js";
 import { errorHandler, notFoundHandler } from "./http.js";
 import { generalRateLimit } from "./middleware/rate-limits.js";
 import { authRouter } from "./routes/auth.routes.js";
+import { businessRouter } from "./routes/business.routes.js";
 import { logsRouter } from "./routes/logs.routes.js";
 import { mpesaRouter } from "./routes/mpesa.routes.js";
 import { platformRouter } from "./routes/platform.routes.js";
@@ -76,6 +77,7 @@ export function createApp() {
   app.use(transactionsRouter);
   app.use(logsRouter);
   app.use(platformRouter);
+  app.use(businessRouter);
   app.use(tenantsRouter);
   app.use(usersRouter);
   app.use("/mpesa", mpesaRouter);

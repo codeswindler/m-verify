@@ -1,7 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, Loader2, LogOut, Minus, Pin, PinOff, ShieldCheck } from "lucide-react";
-import type { AuthResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
-import { api, API_BASE_URL, type DesktopUpdateInfo } from "./api";
+import {
+  BarChart3,
+  CheckCircle2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Loader2,
+  LogOut,
+  Minus,
+  Pin,
+  PinOff,
+  ReceiptText,
+  RefreshCw,
+  ShieldCheck,
+  UserPlus,
+  Users
+} from "lucide-react";
+import type { AuthResponse, PaymentSummary, VerificationResponse, VerificationStatus } from "@m-verify/shared";
+import {
+  api,
+  API_BASE_URL,
+  type BusinessDashboard,
+  type DesktopUpdateInfo,
+  type DesktopUser
+} from "./api";
 import {
   enableAutostartOnce,
   getCurrentAppVersion,
@@ -15,6 +37,7 @@ import {
 
 const authKey = "mverify_desktop_auth";
 const deviceKey = "mverify_desktop_device_id";
+const portalUrl = API_BASE_URL.replace(/\/api\/?$/, "");
 
 type VerifyForm = {
   phoneNumber: string;
@@ -27,6 +50,8 @@ type UpdatePromptState = {
   currentVersion: string;
   latest: DesktopUpdateInfo;
 };
+
+type DesktopTab = "dashboard" | "verify" | "payments" | "staff";
 
 const initialForm: VerifyForm = {
   phoneNumber: "",
@@ -46,6 +71,17 @@ function getDeviceId(): string {
 function resultTone(result?: VerificationStatus): string {
   if (!result) return "";
   return result.toLowerCase().replace(/_/g, "-");
+}
+
+function formatAmount(value: string | number): string {
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return "0";
+  return amount.toLocaleString("en-KE", { maximumFractionDigits: 2 });
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
 function compareVersions(left: string, right: string): number {
@@ -81,6 +117,42 @@ function UpdateBanner({ update }: { update: UpdatePromptState | null }) {
   );
 }
 
+function Titlebar({
+  auth,
+  alwaysTop,
+  onToggleTop,
+  onLogout
+}: {
+  auth: AuthResponse | null;
+  alwaysTop: boolean;
+  onToggleTop: () => void;
+  onLogout?: () => void;
+}) {
+  return (
+    <div className="titlebar" data-tauri-drag-region onPointerDown={handleTitlebarPointerDown}>
+      <div className="title-brand" data-tauri-drag-region>
+        <ShieldCheck size={19} />
+        <span data-tauri-drag-region>M-Verify</span>
+      </div>
+      <div className="window-actions">
+        {auth && (
+          <button type="button" className="icon-button" onClick={onToggleTop} title="Toggle always on top">
+            {alwaysTop ? <Pin size={15} /> : <PinOff size={15} />}
+          </button>
+        )}
+        <button type="button" className="icon-button" onClick={() => void hideWindow()} title="Minimize to tray">
+          <Minus size={16} />
+        </button>
+        {auth && onLogout && (
+          <button type="button" className="icon-button" onClick={onLogout} title="Sign out">
+            <LogOut size={15} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; update: UpdatePromptState | null }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -110,16 +182,7 @@ function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; upd
 
   return (
     <form className="screen login-screen" onSubmit={submit}>
-      <div className="titlebar" data-tauri-drag-region onPointerDown={handleTitlebarPointerDown}>
-        <div className="title-brand" data-tauri-drag-region>
-          <ShieldCheck size={20} />
-          <span data-tauri-drag-region>M-Verify</span>
-        </div>
-        <button type="button" className="icon-button" onClick={() => void hideWindow()} title="Minimize to tray">
-          <Minus size={16} />
-        </button>
-      </div>
-
+      <Titlebar auth={null} alwaysTop onToggleTop={() => undefined} />
       <section className="content">
         <UpdateBanner update={update} />
         <div className="login-mark">
@@ -156,21 +219,17 @@ function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; upd
   );
 }
 
-function Verifier({ auth, onLogout, update }: { auth: AuthResponse; onLogout: () => void; update: UpdatePromptState | null }) {
+function VerifyView({ auth }: { auth: AuthResponse }) {
   const [form, setForm] = useState<VerifyForm>(initialForm);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [alwaysTop, setAlwaysTop] = useState(true);
 
-  const canSubmit = useMemo(
-    () => {
-      const hasIdentifier = Boolean(form.phoneNumber.trim() || form.transactionCode.trim() || form.reference.trim());
-      const amountIsValid = !form.amount.trim() || Number(form.amount) > 0;
-      return hasIdentifier && amountIsValid;
-    },
-    [form]
-  );
+  const canSubmit = useMemo(() => {
+    const hasIdentifier = Boolean(form.phoneNumber.trim() || form.transactionCode.trim() || form.reference.trim());
+    const amountIsValid = !form.amount.trim() || Number(form.amount) > 0;
+    return hasIdentifier && amountIsValid;
+  }, [form]);
 
   async function verify(event: React.FormEvent) {
     event.preventDefault();
@@ -187,9 +246,7 @@ function Verifier({ auth, onLogout, update }: { auth: AuthResponse; onLogout: ()
         reference: form.reference || undefined
       });
       setResult(response);
-      if (response.result === "VERIFIED") {
-        setForm(initialForm);
-      }
+      if (response.result === "VERIFIED") setForm(initialForm);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
@@ -197,9 +254,321 @@ function Verifier({ auth, onLogout, update }: { auth: AuthResponse; onLogout: ()
     }
   }
 
+  return (
+    <form className="view-stack" onSubmit={verify}>
+      <label>
+        Phone number
+        <input
+          placeholder="Optional for paybill"
+          value={form.phoneNumber}
+          onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })}
+          inputMode="tel"
+        />
+      </label>
+      <label>
+        M-Pesa code
+        <input
+          placeholder="RBA123ABC1"
+          value={form.transactionCode}
+          onChange={(event) => setForm({ ...form, transactionCode: event.target.value.toUpperCase() })}
+          className="mono"
+        />
+      </label>
+      <div className="two-col">
+        <label>
+          Expected amount
+          <input
+            placeholder="Optional"
+            value={form.amount}
+            onChange={(event) => setForm({ ...form, amount: event.target.value })}
+            inputMode="decimal"
+          />
+        </label>
+        <label>
+          Reference
+          <input
+            placeholder="Bill ref"
+            value={form.reference}
+            onChange={(event) => setForm({ ...form, reference: event.target.value })}
+          />
+        </label>
+      </div>
+
+      <button className="primary verify-button" disabled={loading || !canSubmit}>
+        {loading && <Loader2 className="spin" size={16} />}
+        {loading ? "Checking" : "Verify payment"}
+      </button>
+
+      {error && <div className="error">{error}</div>}
+      {result && (
+        <div className={`result result-${resultTone(result.result)}`}>
+          <strong>{result.result}</strong>
+          <span>{result.message}</span>
+          {result.payment && (
+            <dl>
+              <div>
+                <dt>Code</dt>
+                <dd>{result.payment.transactionCode}</dd>
+              </div>
+              <div>
+                <dt>Amount</dt>
+                <dd>KES {result.payment.amount}</dd>
+              </div>
+              <div>
+                <dt>Phone</dt>
+                <dd>{result.payment.phoneNumber}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
+      )}
+    </form>
+  );
+}
+
+function KpiCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="kpi-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PaymentRow({ payment }: { payment: PaymentSummary }) {
+  return (
+    <div className="list-row">
+      <div>
+        <strong>KES {formatAmount(payment.amount)}</strong>
+        <span>{payment.customerName || payment.reference || payment.transactionCode}</span>
+      </div>
+      <div className="list-row-right">
+        <span>{payment.verifiedStatus ? "Verified" : "Received"}</span>
+        <small>{formatDate(payment.paymentTime)}</small>
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({ token }: { token: string }) {
+  const [dashboard, setDashboard] = useState<BusinessDashboard | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setDashboard(await api.businessDashboard(token));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Dashboard failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <section className="view-stack">
+      <div className="view-heading">
+        <div>
+          <h2>Dashboard</h2>
+          <p>Business activity</p>
+        </div>
+        <button type="button" className="small-button" onClick={() => void load()} disabled={loading}>
+          <RefreshCw size={13} />
+        </button>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <div className="kpi-grid">
+        <KpiCard label="Payments" value={String(dashboard?.kpis.paidTransactions ?? 0)} />
+        <KpiCard label="Volume" value={`KES ${formatAmount(dashboard?.kpis.totalPaymentVolume ?? 0)}`} />
+        <KpiCard label="Today" value={`KES ${formatAmount(dashboard?.kpis.todayPaymentVolume ?? 0)}`} />
+        <KpiCard label="Staff" value={String(dashboard?.kpis.activeStaffUsers ?? 0)} />
+      </div>
+      <div className="panel-list">
+        <h3>Recent payments</h3>
+        {dashboard?.recentPayments.length ? (
+          dashboard.recentPayments.map((payment) => <PaymentRow key={payment.id} payment={payment} />)
+        ) : (
+          <div className="empty-state">No payments received yet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PaymentsView({ token }: { token: string }) {
+  const [payments, setPayments] = useState<PaymentSummary[]>([]);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ page: "1", limit: "25" });
+      if (search.trim()) params.set("search", search.trim());
+      const result = await api.listTransactions(token, params);
+      setPayments(result.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Payments failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <section className="view-stack">
+      <div className="search-row">
+        <input placeholder="Search code, phone, reference" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <button type="button" className="small-button" onClick={() => void load()} disabled={loading}>
+          <RefreshCw size={13} />
+        </button>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <div className="panel-list">
+        {payments.length ? payments.map((payment) => <PaymentRow key={payment.id} payment={payment} />) : <div className="empty-state">No payments found.</div>}
+      </div>
+    </section>
+  );
+}
+
+function StaffView({ token }: { token: string }) {
+  const [users, setUsers] = useState<DesktopUser[]>([]);
+  const [form, setForm] = useState({ username: "", fullName: "", password: "", role: "waiter" as "manager" | "waiter" });
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.listUsers(token);
+      setUsers(result.data.filter((user) => user.role !== "admin"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Staff failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function createStaff(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    try {
+      await api.createUser(token, form);
+      setForm({ username: "", fullName: "", password: "", role: "waiter" });
+      setMessage("Staff user created.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create staff");
+    }
+  }
+
+  async function toggleUser(user: DesktopUser) {
+    setError("");
+    setMessage("");
+    try {
+      await api.updateUser(token, user.id, { disabled: !user.disabled });
+      setMessage(`${user.username} updated.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update staff");
+    }
+  }
+
+  async function resetPassword(user: DesktopUser) {
+    const password = window.prompt(`New password for ${user.username}`);
+    if (!password) return;
+    setError("");
+    setMessage("");
+    try {
+      await api.updateUser(token, user.id, { password });
+      setMessage(`${user.username} password updated.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset password");
+    }
+  }
+
+  return (
+    <section className="view-stack">
+      <form className="staff-form" onSubmit={createStaff}>
+        <input placeholder="Username" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
+        <input placeholder="Full name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
+        <div className="two-col">
+          <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as "manager" | "waiter" })}>
+            <option value="waiter">Waiter</option>
+            <option value="manager">Business Admin</option>
+          </select>
+          <input placeholder="Password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+        </div>
+        <button className="primary" disabled={!form.username || !form.fullName || !form.password}>
+          <UserPlus size={15} />
+          Add staff
+        </button>
+      </form>
+      {message && <div className="success">{message}</div>}
+      {error && <div className="error">{error}</div>}
+      <div className="panel-list">
+        {users.length ? (
+          users.map((user) => (
+            <div className="list-row" key={user.id}>
+              <div>
+                <strong>{user.fullName}</strong>
+                <span>{user.role === "manager" ? "business admin" : "waiter"} - {user.disabled ? "disabled" : "active"}</span>
+              </div>
+              <div className="row-actions">
+                <button type="button" onClick={() => void resetPassword(user)}>Pw</button>
+                <button type="button" onClick={() => void toggleUser(user)} disabled={loading}>{user.disabled ? "Enable" : "Disable"}</button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="empty-state">No staff users yet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PlatformAdminView() {
+  return (
+    <section className="content">
+      <div className="admin-notice">
+        <ShieldCheck size={42} />
+        <h1>Platform admin</h1>
+        <p>Use the web portal to manage businesses, platform users, commissions, and M-Pesa credentials.</p>
+        <button type="button" className="primary" onClick={() => void openExternalUrl(portalUrl)}>
+          <ExternalLink size={15} />
+          Open web admin
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function LoggedInApp({ auth, update, onLogout }: { auth: AuthResponse; update: UpdatePromptState | null; onLogout: () => void }) {
+  const [alwaysTop, setAlwaysTopState] = useState(true);
+  const [tab, setTab] = useState<DesktopTab>(auth.user.role === "manager" ? "dashboard" : "verify");
+
   async function toggleAlwaysTop() {
     const next = !alwaysTop;
-    setAlwaysTop(next);
+    setAlwaysTopState(next);
     await setAlwaysOnTop(next);
   }
 
@@ -208,104 +577,43 @@ function Verifier({ auth, onLogout, update }: { auth: AuthResponse; onLogout: ()
     onLogout();
   }
 
-  return (
-    <form className="screen" onSubmit={verify}>
-      <div className="titlebar" data-tauri-drag-region onPointerDown={handleTitlebarPointerDown}>
-        <div className="title-brand" data-tauri-drag-region>
-          <ShieldCheck size={19} />
-          <span data-tauri-drag-region>M-Verify</span>
-        </div>
-        <div className="window-actions">
-          <button type="button" className="icon-button" onClick={() => void toggleAlwaysTop()} title="Toggle always on top">
-            {alwaysTop ? <Pin size={15} /> : <PinOff size={15} />}
-          </button>
-          <button type="button" className="icon-button" onClick={() => void hideWindow()} title="Minimize to tray">
-            <Minus size={16} />
-          </button>
-          <button type="button" className="icon-button" onClick={() => void logout()} title="Sign out">
-            <LogOut size={15} />
-          </button>
-        </div>
-      </div>
+  if (auth.user.role === "admin") {
+    return (
+      <main className="screen">
+        <Titlebar auth={auth} alwaysTop={alwaysTop} onToggleTop={() => void toggleAlwaysTop()} onLogout={() => void logout()} />
+        <PlatformAdminView />
+      </main>
+    );
+  }
 
+  const isManager = auth.user.role === "manager";
+
+  return (
+    <main className="screen">
+      <Titlebar auth={auth} alwaysTop={alwaysTop} onToggleTop={() => void toggleAlwaysTop()} onLogout={() => void logout()} />
       <section className="content verifier-content">
         <UpdateBanner update={update} />
         <div className="operator-row">
           <div>
-            <strong>{auth.user.fullName}</strong>
-            <span>{auth.user.role}</span>
+            <strong>{auth.user.tenantName ?? auth.user.fullName}</strong>
+            <span>{auth.user.role === "manager" ? "business admin" : "waiter"}</span>
           </div>
           <CheckCircle2 size={18} />
         </div>
-
-        <label>
-          Phone number
-          <input
-            placeholder="Optional for paybill"
-            value={form.phoneNumber}
-            onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })}
-            inputMode="tel"
-          />
-        </label>
-        <label>
-          M-Pesa code
-          <input
-            placeholder="RBA123ABC1"
-            value={form.transactionCode}
-            onChange={(event) => setForm({ ...form, transactionCode: event.target.value.toUpperCase() })}
-            className="mono"
-          />
-        </label>
-        <div className="two-col">
-          <label>
-            Expected amount
-            <input
-              placeholder="Optional"
-              value={form.amount}
-              onChange={(event) => setForm({ ...form, amount: event.target.value })}
-              inputMode="decimal"
-            />
-          </label>
-          <label>
-            Reference
-            <input
-              placeholder="Bill ref"
-              value={form.reference}
-              onChange={(event) => setForm({ ...form, reference: event.target.value })}
-            />
-          </label>
-        </div>
-
-        <button className="primary verify-button" disabled={loading || !canSubmit}>
-          {loading && <Loader2 className="spin" size={16} />}
-          {loading ? "Checking" : "Verify payment"}
-        </button>
-
-        {error && <div className="error">{error}</div>}
-        {result && (
-          <div className={`result result-${resultTone(result.result)}`}>
-            <strong>{result.result}</strong>
-            <span>{result.message}</span>
-            {result.payment && (
-              <dl>
-                <div>
-                  <dt>Code</dt>
-                  <dd>{result.payment.transactionCode}</dd>
-                </div>
-                <div>
-                  <dt>Amount</dt>
-                  <dd>KES {result.payment.amount}</dd>
-                </div>
-                <div>
-                  <dt>Phone</dt>
-                  <dd>{result.payment.phoneNumber}</dd>
-                </div>
-              </dl>
-            )}
-          </div>
+        {isManager && (
+          <nav className="role-tabs">
+            <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")} type="button"><BarChart3 size={13} /> Dashboard</button>
+            <button className={tab === "verify" ? "active" : ""} onClick={() => setTab("verify")} type="button"><ShieldCheck size={13} /> Verify</button>
+            <button className={tab === "payments" ? "active" : ""} onClick={() => setTab("payments")} type="button"><ReceiptText size={13} /> Payments</button>
+            <button className={tab === "staff" ? "active" : ""} onClick={() => setTab("staff")} type="button"><Users size={13} /> Staff</button>
+          </nav>
         )}
+        {tab === "dashboard" && isManager && <DashboardView token={auth.accessToken} />}
+        {tab === "verify" && <VerifyView auth={auth} />}
+        {tab === "payments" && isManager && <PaymentsView token={auth.accessToken} />}
+        {tab === "staff" && isManager && <StaffView token={auth.accessToken} />}
       </section>
-    </form>
+    </main>
   );
 }
 
@@ -328,10 +636,7 @@ export function App() {
     let cancelled = false;
     async function checkForUpdate() {
       try {
-        const [currentVersion, latest] = await Promise.all([
-          getCurrentAppVersion(),
-          api.latestDesktopUpdate()
-        ]);
+        const [currentVersion, latest] = await Promise.all([getCurrentAppVersion(), api.latestDesktopUpdate()]);
         if (!cancelled && compareVersions(latest.latestVersion, currentVersion) > 0) {
           setUpdate({ currentVersion, latest });
         }
@@ -355,5 +660,5 @@ export function App() {
     setAuth(null);
   }
 
-  return auth ? <Verifier auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />;
+  return auth ? <LoggedInApp auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />;
 }
