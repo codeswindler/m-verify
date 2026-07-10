@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, LogOut, Minus, Pin, PinOff, ShieldCheck } from "lucide-react";
 import type { AuthResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
 import { api, API_BASE_URL } from "./api";
-import { enableAutostartOnce, hideWindow, restoreWindowState, saveCurrentWindowState, setAlwaysOnTop } from "./tauri";
+import {
+  enableAutostartOnce,
+  hideWindow,
+  restoreWindowState,
+  saveCurrentWindowState,
+  setAlwaysOnTop,
+  startWindowDrag
+} from "./tauri";
 
 const authKey = "mverify_desktop_auth";
 const deviceKey = "mverify_desktop_device_id";
@@ -34,6 +41,13 @@ function resultTone(result?: VerificationStatus): string {
   return result.toLowerCase().replace(/_/g, "-");
 }
 
+function handleTitlebarPointerDown(event: React.PointerEvent<HTMLDivElement>): void {
+  if (event.button !== 0) return;
+  const target = event.target as HTMLElement;
+  if (target.closest("button")) return;
+  void startWindowDrag();
+}
+
 function Login({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -63,7 +77,7 @@ function Login({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
 
   return (
     <form className="screen login-screen" onSubmit={submit}>
-      <div className="titlebar" data-tauri-drag-region>
+      <div className="titlebar" data-tauri-drag-region onPointerDown={handleTitlebarPointerDown}>
         <div className="title-brand" data-tauri-drag-region>
           <ShieldCheck size={20} />
           <span data-tauri-drag-region>M-Verify</span>
@@ -162,7 +176,7 @@ function Verifier({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void
 
   return (
     <form className="screen" onSubmit={verify}>
-      <div className="titlebar" data-tauri-drag-region>
+      <div className="titlebar" data-tauri-drag-region onPointerDown={handleTitlebarPointerDown}>
         <div className="title-brand" data-tauri-drag-region>
           <ShieldCheck size={19} />
           <span data-tauri-drag-region>M-Verify</span>

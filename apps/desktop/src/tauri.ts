@@ -18,6 +18,14 @@ export async function setAlwaysOnTop(value: boolean): Promise<void> {
   }
 }
 
+export async function startWindowDrag(): Promise<void> {
+  try {
+    await getCurrentWindow().startDragging();
+  } catch {
+    // Browser preview mode.
+  }
+}
+
 export async function enableAutostartOnce(): Promise<void> {
   try {
     if (!(await isEnabled())) {

@@ -15,6 +15,8 @@ import { transactionsRouter } from "./routes/transactions.routes.js";
 import { usersRouter } from "./routes/users.routes.js";
 import { verifyRouter } from "./routes/verify.routes.js";
 
+const tauriDesktopOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
+
 export function createApp() {
   const app = express();
 
@@ -23,7 +25,12 @@ export function createApp() {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
+        if (
+          !origin ||
+          config.corsOrigins.length === 0 ||
+          config.corsOrigins.includes(origin) ||
+          tauriDesktopOrigins.has(origin)
+        ) {
           callback(null, true);
           return;
         }
