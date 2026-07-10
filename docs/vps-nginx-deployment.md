@@ -119,6 +119,8 @@ curl -I http://m-verify.theleasemaster.com
 curl -i http://m-verify.theleasemaster.com/api/health
 ```
 
+If you copy this template again after HTTPS has already been enabled, run the Certbot command in the next step again. The template is intentionally HTTP-only before Certbot edits it, so copying it over an existing HTTPS config removes the SSL server block until Certbot re-applies it.
+
 ## 6. Enable HTTPS
 
 ```bash
