@@ -2,6 +2,13 @@ import type { AuthResponse, VerificationResponse } from "@m-verify/shared";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 
+export type DesktopUpdateInfo = {
+  latestVersion: string;
+  downloadUrl: string;
+  releaseNotes?: string;
+  mandatory?: boolean;
+};
+
 type RequestOptions = {
   method?: string;
   token?: string | null;
@@ -38,6 +45,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
+  latestDesktopUpdate() {
+    return request<DesktopUpdateInfo>("/desktop/latest");
+  },
   login(payload: { username: string; password: string; deviceId: string; deviceName?: string }) {
     return request<AuthResponse>("/auth/login", { method: "POST", body: payload });
   },

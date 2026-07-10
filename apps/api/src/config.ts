@@ -62,6 +62,12 @@ export const config = {
     loginMax: toNumber("LOGIN_RATE_LIMIT_MAX", 10),
     verifyMax: toNumber("VERIFY_RATE_LIMIT_MAX", 60)
   },
+  desktop: {
+    latestVersion: process.env.DESKTOP_LATEST_VERSION ?? "0.1.0",
+    downloadUrl: process.env.DESKTOP_DOWNLOAD_URL ?? "",
+    releaseNotes: process.env.DESKTOP_RELEASE_NOTES ?? "Download the latest M-Verify desktop installer.",
+    mandatoryUpdate: toBoolean("DESKTOP_MANDATORY_UPDATE", false)
+  },
   seed: {
     adminUsername: process.env.SEED_ADMIN_USERNAME ?? "admin",
     adminPassword: process.env.SEED_ADMIN_PASSWORD ?? "admin123",

@@ -7,6 +7,26 @@ use tauri::{
 
 struct TopState(Mutex<bool>);
 
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://m-verify.theleasemaster.com/") {
+        return Err("Only M-Verify download links can be opened".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    let mut command = std::process::Command::new("explorer");
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
+
+    command
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -81,6 +101,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(TopState(Mutex::new(true)))
+        .invoke_handler(tauri::generate_handler![open_external_url])
         .setup(|app| {
             #[cfg(desktop)]
             {

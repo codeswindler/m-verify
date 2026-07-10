@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, LogOut, Minus, Pin, PinOff, ShieldCheck } from "lucide-react";
 import type { AuthResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
-import { api, API_BASE_URL } from "./api";
+import { api, API_BASE_URL, type DesktopUpdateInfo } from "./api";
 import {
   enableAutostartOnce,
+  getCurrentAppVersion,
   hideWindow,
+  openExternalUrl,
   restoreWindowState,
   saveCurrentWindowState,
   setAlwaysOnTop,
@@ -19,6 +21,11 @@ type VerifyForm = {
   transactionCode: string;
   amount: string;
   reference: string;
+};
+
+type UpdatePromptState = {
+  currentVersion: string;
+  latest: DesktopUpdateInfo;
 };
 
 const initialForm: VerifyForm = {
@@ -41,6 +48,17 @@ function resultTone(result?: VerificationStatus): string {
   return result.toLowerCase().replace(/_/g, "-");
 }
 
+function compareVersions(left: string, right: string): number {
+  const leftParts = left.split(".").map((part) => Number(part.replace(/\D+.*/, "")) || 0);
+  const rightParts = right.split(".").map((part) => Number(part.replace(/\D+.*/, "")) || 0);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 function handleTitlebarPointerDown(event: React.PointerEvent<HTMLDivElement>): void {
   if (event.button !== 0) return;
   const target = event.target as HTMLElement;
@@ -48,7 +66,22 @@ function handleTitlebarPointerDown(event: React.PointerEvent<HTMLDivElement>): v
   void startWindowDrag();
 }
 
-function Login({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
+function UpdateBanner({ update }: { update: UpdatePromptState | null }) {
+  if (!update) return null;
+  return (
+    <div className="update-banner">
+      <div>
+        <strong>Update available</strong>
+        <span>Version {update.latest.latestVersion} is ready. You have {update.currentVersion}.</span>
+      </div>
+      <button type="button" onClick={() => void openExternalUrl(update.latest.downloadUrl)}>
+        Download
+      </button>
+    </div>
+  );
+}
+
+function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; update: UpdatePromptState | null }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -88,6 +121,7 @@ function Login({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
       </div>
 
       <section className="content">
+        <UpdateBanner update={update} />
         <div className="login-mark">
           <ShieldCheck size={42} />
           <h1>Staff login</h1>
@@ -122,7 +156,7 @@ function Login({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
   );
 }
 
-function Verifier({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void }) {
+function Verifier({ auth, onLogout, update }: { auth: AuthResponse; onLogout: () => void; update: UpdatePromptState | null }) {
   const [form, setForm] = useState<VerifyForm>(initialForm);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
@@ -195,6 +229,7 @@ function Verifier({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void
       </div>
 
       <section className="content verifier-content">
+        <UpdateBanner update={update} />
         <div className="operator-row">
           <div>
             <strong>{auth.user.fullName}</strong>
@@ -279,6 +314,7 @@ export function App() {
     const raw = localStorage.getItem(authKey);
     return raw ? (JSON.parse(raw) as AuthResponse) : null;
   });
+  const [update, setUpdate] = useState<UpdatePromptState | null>(null);
 
   useEffect(() => {
     void enableAutostartOnce();
@@ -286,6 +322,27 @@ export function App() {
     window.addEventListener("beforeunload", () => {
       void saveCurrentWindowState();
     });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkForUpdate() {
+      try {
+        const [currentVersion, latest] = await Promise.all([
+          getCurrentAppVersion(),
+          api.latestDesktopUpdate()
+        ]);
+        if (!cancelled && compareVersions(latest.latestVersion, currentVersion) > 0) {
+          setUpdate({ currentVersion, latest });
+        }
+      } catch {
+        // Update checks should never block payment verification.
+      }
+    }
+    void checkForUpdate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function saveAuth(next: AuthResponse) {
@@ -298,5 +355,5 @@ export function App() {
     setAuth(null);
   }
 
-  return auth ? <Verifier auth={auth} onLogout={logout} /> : <Login onLogin={saveAuth} />;
+  return auth ? <Verifier auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />;
 }

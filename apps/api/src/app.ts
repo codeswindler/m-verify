@@ -61,6 +61,16 @@ export function createApp() {
     });
   });
 
+  app.get(["/desktop/latest", "/desktop/latest.json"], (_request, response) => {
+    const baseUrl = config.publicApiBaseUrl.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+    response.json({
+      latestVersion: config.desktop.latestVersion,
+      downloadUrl: config.desktop.downloadUrl || `${baseUrl}/downloads/M-Verify-Setup.exe`,
+      releaseNotes: config.desktop.releaseNotes,
+      mandatory: config.desktop.mandatoryUpdate
+    });
+  });
+
   app.use("/auth", authRouter);
   app.use(verifyRouter);
   app.use(transactionsRouter);
