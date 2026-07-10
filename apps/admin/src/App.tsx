@@ -41,6 +41,7 @@ import { MVerifyIcon, MVerifyLogo } from "./Logo";
 
 type Tab = "platform-dashboard" | "businesses" | "platform-users" | "verify" | "transactions" | "staff";
 const tokenKey = "mverify_admin_auth";
+const desktopDownloadUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL ?? "/downloads/M-Verify-Setup.exe";
 type ToastTone = "success" | "error" | "info";
 type Notify = (title: string, message?: string, tone?: ToastTone) => void;
 
@@ -78,8 +79,8 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function LoginView({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -137,6 +138,10 @@ function LoginView({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
           </div>
           {error && <div className="error">{error}</div>}
           <button className="primary login-sign-btn" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
+          <a className="desktop-download-link" href={desktopDownloadUrl} download>
+            <Download size={15} />
+            Download Windows App
+          </a>
           <p className="login-footnote">{API_BASE_URL}</p>
         </form>
       </div>
@@ -1117,6 +1122,10 @@ export function App() {
           )}
         </nav>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <a className="topbar-download" href={desktopDownloadUrl} download>
+            <Download size={13} />
+            Windows App
+          </a>
           <div className="user-avatar" title={auth.user.fullName}>{initials(auth.user.fullName)}</div>
           <button className="signout-btn" onClick={logout}><LogOut size={13} /> Sign out</button>
         </div>

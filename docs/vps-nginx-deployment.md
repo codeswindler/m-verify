@@ -134,6 +134,27 @@ curl -I https://m-verify.theleasemaster.com
 curl -i https://m-verify.theleasemaster.com/api/health
 ```
 
+## 6.1. Publish The Windows Installer
+
+Build the installer on a Windows machine:
+
+```powershell
+$env:VITE_API_BASE_URL="https://m-verify.theleasemaster.com/api"
+pnpm --filter @m-verify/desktop tauri:build
+```
+
+Upload the generated installer to the VPS:
+
+```powershell
+scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.0_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify-Setup.exe
+```
+
+The portal download button points to:
+
+```text
+https://m-verify.theleasemaster.com/downloads/M-Verify-Setup.exe
+```
+
 ## 7. Seed Platform Admin
 
 ```bash
