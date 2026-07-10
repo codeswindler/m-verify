@@ -89,6 +89,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 
 The live stack runs MySQL, the API, the admin panel, and a Caddy HTTPS reverse proxy. See `docs/deployment.md` for DNS, HTTPS, Daraja callback, admin seeding, backup, and Windows installer steps.
 
+For the `m-verify.theleasemaster.com` VPS where Nginx is already serving other apps, use `docker-compose.nginx.yml` instead. See `docs/vps-nginx-deployment.md`.
+
 ## Windows Installer
 
 Install the Tauri Windows prerequisites first, then run:

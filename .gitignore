@@ -8,6 +8,7 @@ build/
 .env.*
 !.env.example
 !.env.production.example
+!.env.nginx.example
 .env.local
 .env.*.local
 coverage/
