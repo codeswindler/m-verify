@@ -148,7 +148,7 @@ pnpm --filter @m-verify/desktop tauri:build
 Upload the generated installer to the VPS:
 
 ```powershell
-scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.2_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify-Setup.exe
+scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.3_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify-Setup.exe
 ```
 
 The portal download button points to:
@@ -160,7 +160,7 @@ https://m-verify.theleasemaster.com/downloads/M-Verify-Setup.exe
 To make already-installed desktop apps show an update prompt, set the latest version in `/var/www/m-verify/.env.production`:
 
 ```env
-DESKTOP_LATEST_VERSION=0.1.2
+DESKTOP_LATEST_VERSION=0.1.3
 DESKTOP_DOWNLOAD_URL=https://m-verify.theleasemaster.com/downloads/M-Verify-Setup.exe
 DESKTOP_RELEASE_NOTES=Download the latest M-Verify desktop installer.
 DESKTOP_MANDATORY_UPDATE=false

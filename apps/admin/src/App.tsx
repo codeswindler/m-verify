@@ -21,7 +21,6 @@ import type {
   AuthResponse,
   MpesaCredentialSummary,
   PaginatedResponse,
-  PaymentLookupResponse,
   PaymentSummary,
   TenantSummary,
   VerificationResponse
@@ -832,65 +831,70 @@ function TransactionsView({ token, notify }: { token: string; notify: Notify }) 
 }
 
 function VerifyView({ token, notify }: { token: string; notify: Notify }) {
-  const [form, setForm] = useState({ phoneNumber: "", transactionCode: "", amount: "", reference: "" });
-  const [lookup, setLookup] = useState<PaymentLookupResponse | null>(null);
+  const [query, setQuery] = useState("");
+  const [payments, setPayments] = useState<PaymentSummary[]>([]);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const hasIdentifier = Boolean(form.phoneNumber.trim() || form.transactionCode.trim() || form.reference.trim());
-  const amountIsValid = !form.amount.trim() || Number(form.amount) > 0;
-  const canSearch = hasIdentifier && amountIsValid;
+  const [searching, setSearching] = useState(false);
 
-  function payload() {
-    const amount = form.amount.trim();
-    return {
-      phoneNumber: form.phoneNumber.trim() || undefined,
-      transactionCode: form.transactionCode.trim() || undefined,
-      amount: amount ? Number(amount) : undefined,
-      reference: form.reference.trim() || undefined
-    };
-  }
-
-  async function searchPayment(event: React.FormEvent) {
-    event.preventDefault();
-    setError("");
+  useEffect(() => {
+    const trimmed = query.trim();
     setResult(null);
-    setLookup(null);
-    setLoading(true);
-    try {
-      const lookupResult = await api.lookupPayment(token, payload());
-      setLookup(lookupResult);
-      if (lookupResult.found && lookupResult.amountMatches !== false) {
-        notify("Received payment found", lookupResult.payment ? `KES ${formatAmount(lookupResult.payment.amount)} · ${lookupResult.payment.reference ?? lookupResult.payment.transactionCode}` : lookupResult.message);
-      } else {
-        notify(lookupResult.found ? "Amount mismatch" : "Payment not found", lookupResult.message, lookupResult.found ? "error" : "info");
-      }
-    } catch (err) {
-      const messageText = err instanceof Error ? err.message : "Payment search failed";
-      setError(messageText);
-      notify("Payment search failed", messageText, "error");
-    } finally {
-      setLoading(false);
+    setSelectedPayment(null);
+    if (!trimmed) {
+      setPayments([]);
+      setError("");
+      setSearching(false);
+      return;
     }
-  }
 
-  async function verifyFoundPayment() {
+    let cancelled = false;
+    setSearching(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q: trimmed, limit: "20" });
+        const searchResult = await api.searchVerificationPayments(token, params);
+        if (!cancelled) {
+          setPayments(searchResult.data);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const messageText = err instanceof Error ? err.message : "Payment search failed";
+          setPayments([]);
+          setError(messageText);
+          notify("Payment search failed", messageText, "error");
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [token, query, notify]);
+
+  async function verifySelectedPayment() {
+    if (!selectedPayment) return;
     setError("");
     setResult(null);
     setLoading(true);
     try {
-      const verification = await api.verifyPayment(token, payload());
+      const verification = await api.verifyPayment(token, { paymentId: selectedPayment.id });
       setResult(verification);
       notify(
         verification.result === "VERIFIED" ? "Payment verified" : verification.result.replace(/_/g, " "),
         verification.message,
         verification.result === "VERIFIED" ? "success" : verification.result === "ALREADY_VERIFIED" ? "info" : "error"
       );
-      setLookup((current) => current?.payment ? {
-        ...current,
-        alreadyVerified: verification.result === "VERIFIED" || verification.result === "ALREADY_VERIFIED",
-        payment: verification.payment ?? current.payment
-      } : current);
+      if (verification.payment) {
+        setSelectedPayment(verification.payment);
+        setPayments((current) => current.map((payment) => payment.id === verification.payment!.id ? verification.payment! : payment));
+      }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Verification failed";
       setError(messageText);
@@ -904,33 +908,67 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
     <>
       <div className="section-header"><h2>Verify Payment</h2></div>
       <section className="panel verify-panel">
-        <form className="verify-form" onSubmit={searchPayment}>
-          <label>Reference code<input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} placeholder="Table, order, account, or bill ref" /></label>
-          <label>M-Pesa code<input value={form.transactionCode} onChange={(event) => setForm({ ...form, transactionCode: event.target.value.toUpperCase() })} /></label>
-          <label>Expected amount<input type="number" min="1" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="Optional" /></label>
-          <label>Phone number<input value={form.phoneNumber} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} placeholder="Optional when using paybill reference" /></label>
-          <button className="primary" disabled={loading || !canSearch}>{loading ? "Searching..." : "Search received payment"}</button>
-        </form>
-        {error && <div className="error">{error}</div>}
-        {lookup && (
-          <div className={`result-card ${lookup.found && lookup.amountMatches !== false ? "result-verified" : "result-amount-mismatch"}`}>
-            <strong>{lookup.message}</strong>
-            {lookup.payment && (
-              <dl className="payment-details">
-                <div><dt>Customer</dt><dd>{lookup.payment.customerName ?? "M-Pesa payer"}</dd></div>
-                <div><dt>Reference</dt><dd>{lookup.payment.reference ?? "-"}</dd></div>
-                <div><dt>M-Pesa code</dt><dd>{lookup.payment.transactionCode}</dd></div>
-                <div><dt>Amount received</dt><dd>KES {formatAmount(lookup.payment.amount)}</dd></div>
-                <div><dt>Phone</dt><dd>{lookup.payment.phoneNumber}</dd></div>
-                <div><dt>Received at</dt><dd>{formatDate(lookup.payment.paymentTime)}</dd></div>
-                <div><dt>Formal verification</dt><dd>{lookup.payment.verifiedStatus ? `Verified by ${lookup.payment.verifiedBy?.username ?? "staff"}` : "Not yet verified"}</dd></div>
-              </dl>
-            )}
-            {lookup.found && lookup.amountMatches !== false && !lookup.alreadyVerified && (
-              <button className="primary" type="button" onClick={() => void verifyFoundPayment()} disabled={loading}>Verify formally</button>
+        <div className="verify-search-layout">
+          <div className="verify-search-side">
+            <label>Search received payments
+              <div className="searchbox verify-searchbox">
+                <Search size={15} />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="M-Pesa code, amount, or customer name" />
+              </div>
+            </label>
+            <div className="verify-results-list">
+              {!query.trim() && <div className="empty-state">Start typing to find a received payment.</div>}
+              {query.trim() && searching && <div className="empty-state">Searching payments...</div>}
+              {query.trim() && !searching && !payments.length && <div className="empty-state">No received payments found.</div>}
+              {payments.map((payment) => (
+                <button
+                  type="button"
+                  key={payment.id}
+                  className={`verify-payment-option ${selectedPayment?.id === payment.id ? "selected" : ""}`}
+                  onClick={() => {
+                    setSelectedPayment(payment);
+                    setResult(null);
+                  }}
+                >
+                  <div>
+                    <strong>{payment.customerName ?? "M-Pesa customer"}</strong>
+                    <span>{payment.transactionCode} - {payment.reference ?? "No reference"}</span>
+                  </div>
+                  <div>
+                    <strong>KES {formatAmount(payment.amount)}</strong>
+                    <span>{payment.verifiedStatus ? "Verified" : formatDate(payment.paymentTime)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="verify-selected-side">
+            {!selectedPayment ? (
+              <div className="empty-state large">Select a payment from the search results before verifying.</div>
+            ) : (
+              <div className="result-card result-verified">
+                <div className="verify-selected-head">
+                  <strong>Selected payment</strong>
+                  <StatusBadge value={selectedPayment.verifiedStatus ? "ALREADY_VERIFIED" : "PAID"} />
+                </div>
+                <dl className="payment-details">
+                  <div><dt>Customer</dt><dd>{selectedPayment.customerName ?? "M-Pesa customer"}</dd></div>
+                  <div><dt>Reference</dt><dd>{selectedPayment.reference ?? "-"}</dd></div>
+                  <div><dt>M-Pesa code</dt><dd>{selectedPayment.transactionCode}</dd></div>
+                  <div><dt>Amount received</dt><dd>KES {formatAmount(selectedPayment.amount)}</dd></div>
+                  <div><dt>Phone</dt><dd>{selectedPayment.phoneNumber}</dd></div>
+                  <div><dt>Received at</dt><dd>{formatDate(selectedPayment.paymentTime)}</dd></div>
+                  <div><dt>Formal verification</dt><dd>{selectedPayment.verifiedStatus ? `Verified by ${selectedPayment.verifiedBy?.username ?? "staff"}` : "Not yet verified"}</dd></div>
+                </dl>
+                <button className="primary" type="button" onClick={() => void verifySelectedPayment()} disabled={loading || selectedPayment.verifiedStatus}>
+                  {loading ? "Verifying..." : selectedPayment.verifiedStatus ? "Already verified" : "Verify selected payment"}
+                </button>
+              </div>
             )}
           </div>
-        )}
+        </div>
+        {error && <div className="error">{error}</div>}
         {result && (
           <div className={`result-card result-${result.result.toLowerCase().replace(/_/g, "-")}`}>
             <StatusBadge value={result.result} />

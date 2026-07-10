@@ -144,7 +144,10 @@ export const api = {
   lookupPayment(token: string, payload: { phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }) {
     return request<PaymentLookupResponse>("/verify-payment/lookup", { method: "POST", token, body: payload });
   },
-  verifyPayment(token: string, payload: { phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }) {
+  searchVerificationPayments(token: string, params: URLSearchParams) {
+    return request<{ data: PaymentSummary[] }>(`/verify-payment/search?${params.toString()}`, { token });
+  },
+  verifyPayment(token: string, payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }) {
     return request<VerificationResponse>("/verify-payment", { method: "POST", token, body: payload });
   },
   platformDashboard(token: string) {

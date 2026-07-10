@@ -1,12 +1,25 @@
 import { Router } from "express";
-import { verifyPaymentSchema } from "@m-verify/shared";
+import { paymentVerificationSearchSchema, verifyPaymentSchema } from "@m-verify/shared";
 import { asyncHandler } from "../http.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { verifyRateLimit } from "../middleware/rate-limits.js";
-import { validateBody } from "../middleware/validate.js";
-import { lookupPayment, verifyPayment } from "../services/verification.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
+import { lookupPayment, searchReceivedPayments, verifyPayment } from "../services/verification.js";
 
 export const verifyRouter = Router();
+
+verifyRouter.get(
+  "/verify-payment/search",
+  verifyRateLimit,
+  requireAuth,
+  requireRoles("manager", "waiter"),
+  validateQuery(paymentVerificationSearchSchema),
+  asyncHandler(async (request, response) => {
+    const query = request.query as unknown as typeof paymentVerificationSearchSchema._type;
+    const data = await searchReceivedPayments(query.q, query.limit, request.auth!);
+    response.json({ data });
+  })
+);
 
 verifyRouter.post(
   "/verify-payment/lookup",

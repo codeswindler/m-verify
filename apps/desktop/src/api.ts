@@ -74,6 +74,9 @@ export const api = {
   listTransactions(token: string, params: URLSearchParams) {
     return request<PaginatedResponse<PaymentSummary>>(`/transactions?${params.toString()}`, { token });
   },
+  searchVerificationPayments(token: string, params: URLSearchParams) {
+    return request<{ data: PaymentSummary[] }>(`/verify-payment/search?${params.toString()}`, { token });
+  },
   listUsers(token: string) {
     return request<{ data: DesktopUser[] }>("/users", { token });
   },
@@ -85,7 +88,7 @@ export const api = {
   },
   verifyPayment(
     token: string,
-    payload: { phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }
+    payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }
   ) {
     return request<VerificationResponse>("/verify-payment", { method: "POST", token, body: payload });
   },

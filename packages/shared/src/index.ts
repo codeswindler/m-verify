@@ -125,12 +125,18 @@ const optionalAmountSchema = z.preprocess(
 );
 
 export const verifyPaymentSchema = z.object({
+  paymentId: z.coerce.number().int().positive().optional(),
   phoneNumber: z.string().trim().min(7).max(120).optional().or(z.literal("")),
   transactionCode: z.string().trim().min(4).max(40).optional().or(z.literal("")),
   amount: optionalAmountSchema,
   reference: z.string().trim().max(120).optional().or(z.literal(""))
-}).refine((value) => Boolean(value.phoneNumber || value.transactionCode || value.reference), {
-  message: "Provide a phone number, M-Pesa code, or reference code"
+}).refine((value) => Boolean(value.paymentId || value.phoneNumber || value.transactionCode || value.reference), {
+  message: "Select a payment or provide a phone number, M-Pesa code, or reference code"
+});
+
+export const paymentVerificationSearchSchema = z.object({
+  q: z.string().trim().min(1).max(120),
+  limit: z.coerce.number().int().positive().max(25).default(10)
 });
 
 export const createUserSchema = z.object({

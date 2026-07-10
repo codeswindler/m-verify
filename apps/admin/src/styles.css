@@ -1368,7 +1368,7 @@ tbody tr:hover td {
 }
 
 .verify-panel {
-  max-width: 760px;
+  max-width: 1120px;
 }
 
 .verify-form {
@@ -1388,6 +1388,98 @@ tbody tr:hover td {
 .verify-form button {
   grid-column: 1 / -1;
   min-height: 44px;
+}
+
+.verify-search-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.95fr) minmax(420px, 1.05fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.verify-search-side,
+.verify-selected-side {
+  display: grid;
+  gap: 12px;
+}
+
+.verify-search-side label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.verify-searchbox {
+  min-width: 0;
+  margin: 0;
+}
+
+.verify-results-list {
+  display: grid;
+  gap: 8px;
+}
+
+.verify-payment-option {
+  width: 100%;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+  gap: 16px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.verify-payment-option.selected {
+  border-color: var(--brand);
+  background: var(--brand-50);
+  color: var(--brand-darker);
+  box-shadow: 0 0 0 3px rgba(0,166,81,.12);
+}
+
+.verify-payment-option div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.verify-payment-option div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.verify-payment-option strong {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.verify-payment-option span {
+  color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.verify-selected-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.verify-selected-side .result-card {
+  margin-top: 0;
+}
+
+.empty-state.large {
+  min-height: 220px;
+  justify-content: center;
 }
 
 .result-card {

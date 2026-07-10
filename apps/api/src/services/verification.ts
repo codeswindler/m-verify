@@ -4,6 +4,7 @@ import type { AuthContext } from "../types.js";
 import { maskPhoneNumber, moneyToCents, normalizePhoneNumber, normalizeTransactionCode, toSafeUser } from "../utils/format.js";
 
 type VerificationInput = {
+  paymentId?: number;
   phoneNumber?: string;
   transactionCode?: string;
   amount?: number;
@@ -37,6 +38,7 @@ type AuditContext = {
 };
 
 type PreparedLookup = {
+  paymentId: number | null;
   phoneNumber: string | null;
   transactionCode: string | null;
   reference: string | null;
@@ -88,6 +90,7 @@ function paymentToSummary(payment: PaymentRow): PaymentSummary {
 }
 
 function prepareLookup(input: VerificationInput): PreparedLookup {
+  const paymentId = input.paymentId ? Number(input.paymentId) : null;
   const rawPhone = input.phoneNumber?.trim();
   const rawTransactionCode = input.transactionCode?.trim();
   const reference = input.reference?.trim() || null;
@@ -104,11 +107,11 @@ function prepareLookup(input: VerificationInput): PreparedLookup {
     }
   }
 
-  if (!phoneNumber && !transactionCode && !reference) {
-    throw new Error("Provide a phone number, M-Pesa code, or reference code");
+  if (!paymentId && !phoneNumber && !transactionCode && !reference) {
+    throw new Error("Select a payment or provide a phone number, M-Pesa code, or reference code");
   }
 
-  return { phoneNumber, transactionCode, reference, amount: input.amount ?? null };
+  return { paymentId, phoneNumber, transactionCode, reference, amount: input.amount ?? null };
 }
 
 async function findReceivedPayment(
@@ -120,6 +123,10 @@ async function findReceivedPayment(
   const clauses = ["p.tenant_id = ?", "p.status = 'PAID'"];
   const params: DbParam[] = [auth.user.tenantId ?? -1];
 
+  if (lookup.paymentId) {
+    clauses.push("p.id = ?");
+    params.push(lookup.paymentId);
+  }
   if (lookup.transactionCode) {
     clauses.push("p.transaction_code = ?");
     params.push(lookup.transactionCode);
@@ -142,6 +149,44 @@ async function findReceivedPayment(
     params
   );
   return rows;
+}
+
+export async function searchReceivedPayments(
+  query: string,
+  limit: number,
+  auth: AuthContext
+): Promise<PaymentSummary[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const clauses = ["p.tenant_id = ?", "p.status = 'PAID'"];
+  const params: DbParam[] = [auth.user.tenantId ?? -1];
+  const searchClauses: string[] = [];
+  const normalizedCode = trimmed.toUpperCase().replace(/\s+/g, "");
+
+  searchClauses.push("p.transaction_code LIKE ?");
+  params.push(`%${normalizedCode}%`);
+
+  searchClauses.push("p.customer_name LIKE ?");
+  params.push(`%${trimmed}%`);
+
+  const numericAmount = Number(trimmed.replace(/,/g, ""));
+  if (Number.isFinite(numericAmount) && numericAmount >= 0) {
+    searchClauses.push("p.amount = ?");
+    params.push(numericAmount);
+  }
+
+  clauses.push(`(${searchClauses.join(" OR ")})`);
+
+  const [rows] = await pool.execute<PaymentRow[]>(
+    `${paymentSelect}
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY p.verified_status ASC, p.payment_time DESC, p.id DESC
+     LIMIT ${Number(limit)}`,
+    params
+  );
+
+  return rows.map(paymentToSummary);
 }
 
 async function insertLog(
@@ -223,6 +268,7 @@ export async function verifyPayment(
   } catch (error) {
     await insertLog(pool, {
       auth: audit.auth,
+      paymentId: input.paymentId ?? null,
       phoneNumber: input.phoneNumber,
       transactionCode: input.transactionCode,
       amount: input.amount ?? null,
@@ -240,6 +286,7 @@ export async function verifyPayment(
     if (rows.length > 1) {
       await insertLog(connection, {
         auth: audit.auth,
+        paymentId: lookup.paymentId,
         phoneNumber: lookup.phoneNumber,
         transactionCode: lookup.transactionCode,
         amount: lookup.amount,
@@ -259,6 +306,7 @@ export async function verifyPayment(
     if (!payment) {
       await insertLog(connection, {
         auth: audit.auth,
+        paymentId: lookup.paymentId,
         phoneNumber: lookup.phoneNumber,
         transactionCode: lookup.transactionCode,
         amount: lookup.amount,

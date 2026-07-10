@@ -47,13 +47,17 @@ Content-Type: application/json
   "amount": 850
 }
 
-### Verify payment formally
+### Search received payments for verification
+GET {{baseUrl}}/verify-payment/search?q=RBA123ABC1&limit=10
+Authorization: Bearer {{accessToken}}
+
+### Verify selected payment formally
 POST {{baseUrl}}/verify-payment
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "reference": "ORDER-102"
+  "paymentId": 1
 }
 
 ### Search transactions
