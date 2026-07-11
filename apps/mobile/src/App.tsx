@@ -135,7 +135,7 @@ function settlementMultiplier(commissionRatePct?: string | number) {
 }
 
 function settlementAmount(payment: PaymentSummary, multiplier: number) {
-  return amount(payment) * multiplier;
+  return Math.round(amount(payment) * multiplier);
 }
 
 function incrementMapRow(map: Map<string, { count: number; amount: number }>, key: string, payment: PaymentSummary, multiplier: number) {

@@ -83,14 +83,14 @@ businessRouter.get(
       `SELECT
         COALESCE(t.commission_rate_pct, 0) AS commission_rate_pct,
         COUNT(p.id) AS transaction_count,
-        COALESCE(SUM(p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100), 0) AS total_volume,
+        COALESCE(SUM(ROUND(p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100, 0)), 0) AS total_volume,
         COALESCE(SUM(CASE
           WHEN DATE(DATE_ADD(COALESCE(p.payment_time, p.created_at), INTERVAL 3 HOUR)) = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3 HOUR))
-          THEN p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100 ELSE 0 END), 0) AS today_volume,
+          THEN ROUND(p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100, 0) ELSE 0 END), 0) AS today_volume,
         COALESCE(SUM(CASE
           WHEN DATE_ADD(COALESCE(p.payment_time, p.created_at), INTERVAL 3 HOUR) >= DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3 HOUR), '%Y-%m-01')
            AND DATE_ADD(COALESCE(p.payment_time, p.created_at), INTERVAL 3 HOUR) < DATE_ADD(LAST_DAY(DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3 HOUR))), INTERVAL 1 DAY)
-          THEN p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100 ELSE 0 END), 0) AS month_volume,
+          THEN ROUND(p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100, 0) ELSE 0 END), 0) AS month_volume,
         COUNT(CASE WHEN p.verified_status = TRUE THEN 1 END) AS verified_count
        FROM tenants t
        LEFT JOIN payments p ON p.tenant_id = t.id AND p.status = 'PAID'
