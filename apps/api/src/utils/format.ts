@@ -1,4 +1,4 @@
-import type { SafeUser } from "@m-verify/shared";
+import { defaultPermissionsForRole, userModules, type SafeUser, type UserPermissions, type UserRole } from "@m-verify/shared";
 import type { RowDataPacket } from "../db.js";
 
 export function normalizeTransactionCode(value: string): string {
@@ -75,11 +75,13 @@ export function parseDarajaTime(value: string | number | undefined): string | nu
 }
 
 export function toSafeUser(row: RowDataPacket & Record<string, unknown>): SafeUser {
+  const role = row.role as UserRole;
   return {
     id: Number(row.id),
     username: String(row.username),
     fullName: String(row.full_name ?? row.fullName ?? ""),
-    role: row.role as SafeUser["role"],
+    role,
+    permissions: parseUserPermissions(row.module_permissions ?? row.permissions, role),
     disabled: Boolean(row.disabled),
     tenantId: row.tenant_id === null || row.tenantId === null || (row.tenant_id === undefined && row.tenantId === undefined)
       ? null
@@ -88,6 +90,30 @@ export function toSafeUser(row: RowDataPacket & Record<string, unknown>): SafeUs
       ? null
       : String(row.tenant_name ?? row.tenantName)
   };
+}
+
+export function parseUserPermissions(value: unknown, role: UserRole): UserPermissions {
+  const defaults = defaultPermissionsForRole(role);
+  if (value === null || value === undefined || value === "") return defaults;
+
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      return defaults;
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") return defaults;
+  const permissions = { ...defaults };
+  const source = parsed as Record<string, unknown>;
+  for (const module of userModules) {
+    if (typeof source[module] === "boolean") {
+      permissions[module] = source[module];
+    }
+  }
+  return permissions;
 }
 
 export function escapeCsv(value: unknown): string {

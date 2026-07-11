@@ -3,6 +3,7 @@ import type {
   PaginatedResponse,
   PaymentSummary,
   SafeUser,
+  UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
 
@@ -106,10 +107,10 @@ export const api = {
   listUsers(token: string) {
     return request<{ data: MobileStaffUser[] }>("/users", { token });
   },
-  createUser(token: string, payload: { username: string; fullName: string; role: "manager" | "waiter"; password: string }) {
+  createUser(token: string, payload: { username: string; fullName: string; role: "manager" | "waiter"; password: string; permissions?: Partial<UserPermissions> }) {
     return request<SafeUser>("/users", { method: "POST", token, body: payload });
   },
-  updateUser(token: string, id: number, payload: { disabled?: boolean; password?: string; role?: "manager" | "waiter" }) {
+  updateUser(token: string, id: number, payload: { disabled?: boolean; password?: string; role?: "manager" | "waiter"; permissions?: Partial<UserPermissions> }) {
     return request<SafeUser>(`/users/${id}`, { method: "PATCH", token, body: payload });
   }
 };

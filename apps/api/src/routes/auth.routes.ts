@@ -22,6 +22,7 @@ type UserRow = RowDataPacket & {
   password_hash: string;
   full_name: string;
   role: UserRole;
+  module_permissions: string | null;
   disabled: number;
   tenant_id: number | null;
   tenant_name: string | null;
@@ -33,6 +34,7 @@ type SessionRow = RowDataPacket & {
   username: string;
   full_name: string;
   role: UserRole;
+  module_permissions: string | null;
   disabled: number;
   tenant_id: number | null;
   tenant_name: string | null;
@@ -48,7 +50,7 @@ authRouter.post(
     const { username, password, deviceId, deviceName } = request.body as typeof loginSchema._type;
 
     const [rows] = await pool.execute<UserRow[]>(
-      `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.disabled,
+      `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.module_permissions, u.disabled,
         u.tenant_id, t.name AS tenant_name
        FROM users u
        LEFT JOIN tenants t ON t.id = u.tenant_id
@@ -94,7 +96,7 @@ authRouter.post(
     const currentHash = hashRefreshToken(refreshToken);
 
     const [rows] = await pool.execute<SessionRow[]>(
-      `SELECT ds.id, ds.user_id, u.username, u.full_name, u.role, u.disabled,
+      `SELECT ds.id, ds.user_id, u.username, u.full_name, u.role, u.module_permissions, u.disabled,
         u.tenant_id, t.name AS tenant_name
        FROM device_sessions ds
        INNER JOIN users u ON u.id = ds.user_id
@@ -123,6 +125,7 @@ authRouter.post(
       username: session.username,
       full_name: session.full_name,
       role: session.role,
+      module_permissions: session.module_permissions,
       disabled: session.disabled,
       tenant_id: session.tenant_id,
       tenant_name: session.tenant_name

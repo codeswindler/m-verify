@@ -6,6 +6,7 @@ import type {
   PaymentSummary,
   SafeUser,
   TenantSummary,
+  UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
 
@@ -42,6 +43,7 @@ export type CreateUserPayload = {
   role: "admin" | "manager" | "waiter";
   password: string;
   tenantId?: number;
+  permissions?: Partial<UserPermissions>;
 };
 
 export type CreateTenantPayload = {
@@ -88,6 +90,20 @@ export type PlatformDashboard = {
     platformRevenue: string;
     lastPaymentAt: string | null;
   }>;
+};
+
+export type BusinessDashboard = {
+  kpis: {
+    commissionRatePct: string;
+    paidTransactions: number;
+    totalPaymentVolume: string;
+    todayPaymentVolume: string;
+    monthPaymentVolume: string;
+    verifiedTransactions: number;
+    staffUsers: number;
+    activeStaffUsers: number;
+  };
+  recentPayments: PaymentSummary[];
 };
 
 type RequestOptions = {
@@ -142,6 +158,9 @@ export const api = {
   },
   updateUser(token: string, id: number, payload: Partial<CreateUserPayload> & { disabled?: boolean }) {
     return request<SafeUser>(`/users/${id}`, { method: "PATCH", token, body: payload });
+  },
+  businessDashboard(token: string) {
+    return request<BusinessDashboard>("/business/dashboard", { token });
   },
   lookupPayment(token: string, payload: { phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }) {
     return request<PaymentLookupResponse>("/verify-payment/lookup", { method: "POST", token, body: payload });

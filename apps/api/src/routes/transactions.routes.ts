@@ -5,7 +5,7 @@ import type { PaymentStatus, PaymentSummary } from "@m-verify/shared";
 import type { DbParam, RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
 import { AppError, asyncHandler } from "../http.js";
-import { requireAuth, requireRoles } from "../middleware/auth.js";
+import { requireAnyPermission, requireAuth, requireRoles } from "../middleware/auth.js";
 import { validateQuery } from "../middleware/validate.js";
 import type { AuthContext } from "../types.js";
 import { maskPhoneNumber, toCsv, toSafeUser } from "../utils/format.js";
@@ -115,7 +115,7 @@ FROM payments p
 LEFT JOIN tenants t ON t.id = p.tenant_id
 LEFT JOIN users u ON u.id = p.verified_by`;
 
-transactionsRouter.use("/transactions", requireAuth, requireRoles("admin", "manager", "waiter"));
+transactionsRouter.use("/transactions", requireAuth, requireRoles("admin", "manager", "waiter"), requireAnyPermission("transactions", "sales"));
 
 transactionsRouter.get(
   "/transactions/export.csv",

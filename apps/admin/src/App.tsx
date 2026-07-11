@@ -23,13 +23,17 @@ import type {
   PaginatedResponse,
   PaymentSummary,
   TenantSummary,
+  UserModule,
+  UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
+import { defaultPermissionsForRole } from "@m-verify/shared";
 import {
   api,
   API_BASE_URL,
   downloadCsv,
   type AdminUser,
+  type BusinessDashboard,
   type CreateTenantPayload,
   type CreateUserPayload,
   type PlatformDashboard,
@@ -38,11 +42,18 @@ import {
 } from "./api";
 import { MVerifyIcon, MVerifyLogo } from "./Logo";
 
-type Tab = "platform-dashboard" | "businesses" | "platform-users" | "verify" | "transactions" | "staff";
+type Tab = "platform-dashboard" | "businesses" | "platform-users" | "business-dashboard" | "verify" | "transactions" | "staff";
 const tokenKey = "mverify_admin_auth";
 const desktopDownloadUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL ?? "/downloads/M-Verify-Setup.exe";
 type ToastTone = "success" | "error" | "info";
 type Notify = (title: string, message?: string, tone?: ToastTone) => void;
+const permissionLabels: Array<{ key: UserModule; label: string }> = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "verify", label: "Verify" },
+  { key: "transactions", label: "Transactions" },
+  { key: "staff", label: "Staff" },
+  { key: "sales", label: "My sales" }
+];
 
 function getDeviceId(): string {
   const key = "mverify_admin_device_id";
@@ -55,7 +66,12 @@ function getDeviceId(): string {
 
 function defaultTab(auth: AuthResponse | null): Tab {
   if (!auth) return "verify";
-  return auth.user.role === "admin" ? "platform-dashboard" : "verify";
+  if (auth.user.role === "admin") return "platform-dashboard";
+  if (auth.user.permissions.dashboard) return "business-dashboard";
+  if (auth.user.permissions.verify) return "verify";
+  if (auth.user.permissions.transactions) return "transactions";
+  if (auth.user.permissions.staff) return "staff";
+  return "verify";
 }
 
 function formatDate(value: string | null): string {
@@ -310,6 +326,68 @@ function PlatformDashboardView({ token }: { token: string }) {
   );
 }
 
+function BusinessDashboardView({ token }: { token: string }) {
+  const [dashboard, setDashboard] = useState<BusinessDashboard | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setDashboard(await api.businessDashboard(token));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  return (
+    <>
+      <div className="section-header">
+        <div>
+          <h2>Business Dashboard</h2>
+          <p className="subtext">Net settlement after {formatAmount(dashboard?.kpis.commissionRatePct ?? 0)}% commission. Individual payments still show customer-paid amounts.</p>
+        </div>
+        <button onClick={load} disabled={loading}><RefreshCw size={14} /> Refresh</button>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <div className="kpi-grid">
+        <KpiCard label="Payments" value={String(dashboard?.kpis.paidTransactions ?? 0)} icon={<ReceiptText size={18} />} />
+        <KpiCard label="Net Settlement" value={`KES ${formatAmount(dashboard?.kpis.totalPaymentVolume ?? 0)}`} icon={<WalletCards size={18} />} />
+        <KpiCard label="Today Net" value={`KES ${formatAmount(dashboard?.kpis.todayPaymentVolume ?? 0)}`} icon={<CheckCircle2 size={18} />} />
+        <KpiCard label="Staff" value={String(dashboard?.kpis.staffUsers ?? 0)} icon={<UsersIcon size={18} />} />
+      </div>
+      <section className="panel">
+        <div className="section-header compact">
+          <h2>Recent Payments</h2>
+          <span className="section-badge">gross customer amounts</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Customer</th><th>Reference</th><th>Code</th><th>Amount Paid</th><th>Received</th><th>Verified</th></tr></thead>
+            <tbody>
+              {!dashboard?.recentPayments.length ? <EmptyRow label="No payments received yet" /> : dashboard.recentPayments.map((payment) => (
+                <tr key={payment.id}>
+                  <td><strong>{payment.customerName ?? payment.phoneNumber}</strong><span className="subtext">{payment.customerName ? payment.phoneNumber : "M-Pesa payer"}</span></td>
+                  <td>{payment.reference ?? "-"}</td>
+                  <td><span className="mono">{payment.transactionCode}</span></td>
+                  <td className="cell-amount">KES {formatAmount(payment.amount)}</td>
+                  <td className="cell-muted">{formatDate(payment.paymentTime)}</td>
+                  <td><span className={payment.verifiedStatus ? "cell-success" : "cell-muted-s"}>{payment.verifiedStatus ? "Yes" : "No"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
 function emptyMpesaForm(): UpsertMpesaCredentialPayload {
   return {
     environment: "production",
@@ -368,7 +446,8 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     username: "",
     fullName: "",
     role: "waiter",
-    password: ""
+    password: "",
+    permissions: defaultPermissionsForRole("waiter")
   });
   const [mpesaForm, setMpesaForm] = useState<UpsertMpesaCredentialPayload>(() => emptyMpesaForm());
   const [mpesaSettings, setMpesaSettings] = useState<MpesaCredentialSummary | null>(null);
@@ -540,7 +619,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     setMessage("");
     try {
       await api.createUser(token, { ...staffForm, tenantId: selectedBusiness.id });
-      setStaffForm({ username: "", fullName: "", role: "waiter", password: "" });
+      setStaffForm({ username: "", fullName: "", role: "waiter", password: "", permissions: defaultPermissionsForRole("waiter") });
       setMessage("Business user created.");
       notify("Business user created", staffForm.username);
       await loadBusinesses(selectedBusiness.id);
@@ -585,6 +664,25 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
       const messageText = err instanceof Error ? err.message : "Could not reset password";
       setError(messageText);
       notify("Password reset failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleBusinessUserPermission(user: AdminUser, module: UserModule) {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const permissions: Partial<UserPermissions> = { [module]: !user.permissions[module] };
+      await api.updateUser(token, user.id, { permissions });
+      setMessage("Business user permissions updated.");
+      notify("Permissions updated", `${user.username} can${permissions[module] ? "" : " no longer"} access ${permissionLabels.find((item) => item.key === module)?.label ?? module}.`);
+      await loadBusinesses(selectedBusinessId);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not update permissions";
+      setError(messageText);
+      notify("Permission update failed", messageText, "error");
     } finally {
       setLoading(false);
     }
@@ -679,19 +777,51 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                   <div className="form-grid two">
                     <label>Username<input value={staffForm.username} onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })} /></label>
                     <label>Full name<input value={staffForm.fullName} onChange={(event) => setStaffForm({ ...staffForm, fullName: event.target.value })} /></label>
-                    <label>Role<select value={staffForm.role} onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as CreateUserPayload["role"] })}><option value="waiter">Waiter</option><option value="manager">Business Admin</option></select></label>
+                    <label>Role<select value={staffForm.role} onChange={(event) => {
+                      const role = event.target.value as CreateUserPayload["role"];
+                      setStaffForm({ ...staffForm, role, permissions: defaultPermissionsForRole(role) });
+                    }}><option value="waiter">Waiter</option><option value="manager">Business Admin</option></select></label>
                     <label>Temporary password<input type="password" value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} /></label>
+                  </div>
+                  <div className="permission-grid">
+                    {permissionLabels.map((permission) => (
+                      <label key={permission.key} className="permission-toggle">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(staffForm.permissions?.[permission.key])}
+                          onChange={(event) => setStaffForm({
+                            ...staffForm,
+                            permissions: { ...(staffForm.permissions ?? {}), [permission.key]: event.target.checked }
+                          })}
+                        />
+                        <span>{permission.label}</span>
+                      </label>
+                    ))}
                   </div>
                   <button className="primary" disabled={loading}>Create business user</button>
                 </form>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>User</th><th>Role</th><th>Modules</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
                     <tbody>
                       {!businessUsers.length ? <EmptyRow label="No business users yet" /> : businessUsers.map((user) => (
                         <tr key={user.id}>
                           <td><strong>{user.username}</strong><span className="subtext">{user.fullName}</span></td>
                           <td><span className="status">{user.role === "manager" ? "business admin" : user.role}</span></td>
+                          <td>
+                            <div className="permission-pills">
+                              {permissionLabels.map((permission) => (
+                                <button
+                                  key={permission.key}
+                                  type="button"
+                                  className={user.permissions[permission.key] ? "active" : ""}
+                                  onClick={() => void toggleBusinessUserPermission(user, permission.key)}
+                                >
+                                  {permission.label}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
                           <td><span className={`status ${user.disabled ? "status-failed" : "status-verified"}`}>{user.disabled ? "Disabled" : "Active"}</span></td>
                           <td className="cell-muted">{formatDate(user.lastLoginAt)}</td>
                           <td className="actions"><button onClick={() => void toggleBusinessUser(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetBusinessUserPassword(user)}>Reset pw</button></td>
@@ -1024,7 +1154,8 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
     fullName: "",
     role: isPlatform ? "admin" : "waiter",
     password: "",
-    tenantId: auth.user.tenantId ?? undefined
+    tenantId: auth.user.tenantId ?? undefined,
+    permissions: defaultPermissionsForRole(isPlatform ? "admin" : "waiter")
   });
   const visibleUsers = isPlatform ? users.filter((user) => user.role === "admin") : users.filter((user) => user.role !== "admin");
 
@@ -1046,7 +1177,14 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
     try {
       await api.createUser(token, isPlatform ? { ...form, role: "admin", tenantId: undefined } : { ...form, tenantId: auth.user.tenantId ?? undefined });
       notify(isPlatform ? "Admin user created" : "Staff user created", form.username);
-      setForm({ username: "", fullName: "", role: isPlatform ? "admin" : "waiter", password: "", tenantId: auth.user.tenantId ?? undefined });
+      setForm({
+        username: "",
+        fullName: "",
+        role: isPlatform ? "admin" : "waiter",
+        password: "",
+        tenantId: auth.user.tenantId ?? undefined,
+        permissions: defaultPermissionsForRole(isPlatform ? "admin" : "waiter")
+      });
       await load();
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Could not create user";
@@ -1087,6 +1225,19 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
     }
   }
 
+  async function togglePermission(user: AdminUser, module: UserModule) {
+    try {
+      const permissions: Partial<UserPermissions> = { [module]: !user.permissions[module] };
+      await api.updateUser(token, user.id, { permissions });
+      notify("Permissions updated", `${user.username} can${permissions[module] ? "" : " no longer"} access ${permissionLabels.find((item) => item.key === module)?.label ?? module}.`);
+      await load();
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not update permissions";
+      setError(messageText);
+      notify("Permission update failed", messageText, "error");
+    }
+  }
+
   return (
     <>
       <div className="section-header">
@@ -1102,22 +1253,56 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
           {isPlatform ? (
             <label>Role<input value="Platform Admin" disabled /></label>
           ) : (
-            <label>Role<select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as CreateUserPayload["role"] })}>
+            <label>Role<select value={form.role} onChange={(event) => {
+              const role = event.target.value as CreateUserPayload["role"];
+              setForm({ ...form, role, permissions: defaultPermissionsForRole(role) });
+            }}>
               <option value="waiter">Waiter</option>
               <option value="manager">Business Admin</option>
             </select></label>
           )}
           <label>Temporary password<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+          {!isPlatform && (
+            <div className="permission-grid">
+              {permissionLabels.map((permission) => (
+                <label key={permission.key} className="permission-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.permissions?.[permission.key])}
+                    onChange={(event) => setForm({ ...form, permissions: { ...(form.permissions ?? {}), [permission.key]: event.target.checked } })}
+                  />
+                  <span>{permission.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
           <button className="primary">{isPlatform ? "Create admin" : "Create staff user"}</button>
         </form>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+            <thead><tr><th>User</th><th>Role</th>{!isPlatform && <th>Modules</th>}<th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
             <tbody>
               {!visibleUsers.length ? <EmptyRow label="No users found" /> : visibleUsers.map((user) => (
                 <tr key={user.id}>
                   <td><strong>{user.username}</strong><span className="subtext">{user.fullName}</span></td>
                   <td><span className="status">{user.role === "admin" ? "platform admin" : user.role === "manager" ? "business admin" : user.role}</span></td>
+                  {!isPlatform && (
+                    <td>
+                      <div className="permission-pills">
+                        {permissionLabels.map((permission) => (
+                          <button
+                            key={permission.key}
+                            type="button"
+                            className={user.permissions[permission.key] ? "active" : ""}
+                            disabled={user.id === auth.user.id}
+                            onClick={() => void togglePermission(user, permission.key)}
+                          >
+                            {permission.label}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  )}
                   <td><span className={`status ${user.disabled ? "status-failed" : "status-verified"}`}>{user.disabled ? "Disabled" : "Active"}</span></td>
                   <td className="cell-muted">{formatDate(user.lastLoginAt)}</td>
                   <td className="actions"><button onClick={() => void toggleDisabled(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetPassword(user)}>Reset pw</button></td>
@@ -1192,9 +1377,10 @@ export function App() {
             </>
           ) : (
             <>
-              <button className={tab === "verify" ? "active" : ""} onClick={() => setTab("verify")}>Verify</button>
-              {auth.user.role === "manager" && <button className={tab === "transactions" ? "active" : ""} onClick={() => setTab("transactions")}>Transactions</button>}
-              {auth.user.role === "manager" && <button className={tab === "staff" ? "active" : ""} onClick={() => setTab("staff")}>Staff</button>}
+              {auth.user.permissions.dashboard && <button className={tab === "business-dashboard" ? "active" : ""} onClick={() => setTab("business-dashboard")}>Dashboard</button>}
+              {auth.user.permissions.verify && <button className={tab === "verify" ? "active" : ""} onClick={() => setTab("verify")}>Verify</button>}
+              {auth.user.role === "manager" && auth.user.permissions.transactions && <button className={tab === "transactions" ? "active" : ""} onClick={() => setTab("transactions")}>Transactions</button>}
+              {auth.user.role === "manager" && auth.user.permissions.staff && <button className={tab === "staff" ? "active" : ""} onClick={() => setTab("staff")}>Staff</button>}
             </>
           )}
         </nav>
@@ -1211,6 +1397,7 @@ export function App() {
         {tab === "platform-dashboard" && <PlatformDashboardView token={auth.accessToken} />}
         {tab === "businesses" && <BusinessesView token={auth.accessToken} notify={notify} />}
         {tab === "platform-users" && <UsersView auth={auth} notify={notify} />}
+        {tab === "business-dashboard" && <BusinessDashboardView token={auth.accessToken} />}
         {tab === "verify" && <VerifyView token={auth.accessToken} notify={notify} />}
         {tab === "transactions" && <TransactionsView token={auth.accessToken} notify={notify} />}
         {tab === "staff" && <UsersView auth={auth} notify={notify} />}

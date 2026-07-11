@@ -1,4 +1,4 @@
-import type { UserRole } from "@m-verify/shared";
+import type { UserPermissions, UserRole } from "@m-verify/shared";
 
 export type AuthContext = {
   user: {
@@ -6,6 +6,7 @@ export type AuthContext = {
     username: string;
     fullName: string;
     role: UserRole;
+    permissions: UserPermissions;
     disabled: boolean;
     tenantId: number | null;
     tenantName: string | null;

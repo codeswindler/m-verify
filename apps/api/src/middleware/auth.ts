@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import type { UserRole } from "@m-verify/shared";
+import type { UserModule, UserRole } from "@m-verify/shared";
 import type { RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
 import { AppError, asyncHandler } from "../http.js";
@@ -12,6 +12,7 @@ type SessionUserRow = RowDataPacket & {
   username: string;
   full_name: string;
   role: UserRole;
+  module_permissions: string | null;
   disabled: number;
   tenant_id: number | null;
   tenant_name: string | null;
@@ -39,7 +40,7 @@ export const requireAuth = asyncHandler(async (request: Request, _response: Resp
   }
 
   const [rows] = await pool.execute<SessionUserRow[]>(
-    `SELECT ds.id AS session_id, u.id, u.username, u.full_name, u.role, u.disabled,
+    `SELECT ds.id AS session_id, u.id, u.username, u.full_name, u.role, u.module_permissions, u.disabled,
        u.tenant_id, t.name AS tenant_name
      FROM device_sessions ds
      INNER JOIN users u ON u.id = ds.user_id
@@ -76,4 +77,24 @@ export function requireRoles(...roles: UserRole[]) {
 
     next();
   };
+}
+
+export function requireAnyPermission(...modules: UserModule[]) {
+  return (request: Request, _response: Response, next: NextFunction) => {
+    if (!request.auth) {
+      next(new AppError(401, "Authentication required", "UNAUTHENTICATED"));
+      return;
+    }
+
+    if (request.auth.user.role === "admin" || modules.some((module) => request.auth!.user.permissions[module])) {
+      next();
+      return;
+    }
+
+    next(new AppError(403, "You do not have permission to access this module", "FORBIDDEN"));
+  };
+}
+
+export function requirePermission(module: UserModule) {
+  return requireAnyPermission(module);
 }

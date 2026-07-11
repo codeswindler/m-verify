@@ -3,6 +3,20 @@ import { z } from "zod";
 export const userRoles = ["admin", "manager", "waiter"] as const;
 export type UserRole = (typeof userRoles)[number];
 
+export const userModules = ["dashboard", "verify", "transactions", "staff", "sales"] as const;
+export type UserModule = (typeof userModules)[number];
+export type UserPermissions = Record<UserModule, boolean>;
+
+export function defaultPermissionsForRole(role: UserRole): UserPermissions {
+  if (role === "admin") {
+    return { dashboard: true, verify: true, transactions: true, staff: true, sales: true };
+  }
+  if (role === "manager") {
+    return { dashboard: true, verify: true, transactions: true, staff: true, sales: false };
+  }
+  return { dashboard: false, verify: true, transactions: false, staff: false, sales: true };
+}
+
 export const tenantStatuses = ["active", "disabled"] as const;
 export type TenantStatus = (typeof tenantStatuses)[number];
 
@@ -29,6 +43,7 @@ export type SafeUser = {
   username: string;
   fullName: string;
   role: UserRole;
+  permissions: UserPermissions;
   disabled: boolean;
   tenantId: number | null;
   tenantName: string | null;
@@ -142,12 +157,21 @@ export const paymentVerificationSearchSchema = z.object({
   limit: z.coerce.number().int().positive().max(25).default(10)
 });
 
+export const userPermissionsSchema = z.object({
+  dashboard: z.boolean().optional(),
+  verify: z.boolean().optional(),
+  transactions: z.boolean().optional(),
+  staff: z.boolean().optional(),
+  sales: z.boolean().optional()
+}).strict();
+
 export const createUserSchema = z.object({
   username: z.string().min(2).max(80),
   fullName: z.string().min(2).max(120),
   role: z.enum(userRoles),
   password: z.string().min(8).max(200),
-  tenantId: z.coerce.number().int().positive().optional()
+  tenantId: z.coerce.number().int().positive().optional(),
+  permissions: userPermissionsSchema.optional()
 });
 
 export const updateUserSchema = z.object({
@@ -155,7 +179,8 @@ export const updateUserSchema = z.object({
   role: z.enum(userRoles).optional(),
   disabled: z.boolean().optional(),
   password: z.string().min(8).max(200).optional(),
-  tenantId: z.coerce.number().int().positive().nullable().optional()
+  tenantId: z.coerce.number().int().positive().nullable().optional(),
+  permissions: userPermissionsSchema.optional()
 });
 
 export const listQuerySchema = z.object({

@@ -23,7 +23,7 @@ import {
   WalletCards,
   XCircle
 } from "lucide-react";
-import type { AuthResponse, PaymentSummary, VerificationResponse, VerificationStatus } from "@m-verify/shared";
+import { defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
 import {
   api,
   API_BASE_URL,
@@ -85,10 +85,25 @@ const datePresetOptions: Array<{ value: DatePreset; label: string }> = [
   { value: "30d", label: "30 days" },
   { value: "all", label: "All" }
 ];
+const permissionLabels: Array<{ key: UserModule; label: string }> = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "verify", label: "Verify" },
+  { key: "transactions", label: "Transactions" },
+  { key: "staff", label: "Staff" },
+  { key: "sales", label: "My sales" }
+];
 
 function defaultTab(auth: AuthResponse | null): AppTab {
   if (!auth) return "verify";
-  return auth.user.role === "manager" ? "home" : "verify";
+  if (auth.user.role === "manager") {
+    if (auth.user.permissions.dashboard) return "home";
+    if (auth.user.permissions.verify) return "verify";
+    if (auth.user.permissions.transactions) return "insights";
+    if (auth.user.permissions.staff) return "staff";
+  }
+  if (auth.user.permissions.verify) return "verify";
+  if (auth.user.permissions.sales) return "sales";
+  return "verify";
 }
 
 function addDays(key: string, days: number) {
@@ -397,22 +412,24 @@ function TopBar({
   );
 }
 
-function BottomNav({ tab, role, onChange }: { tab: AppTab; role: StaffRole; onChange: (tab: AppTab) => void }) {
+function BottomNav({ tab, role, permissions, onChange }: { tab: AppTab; role: StaffRole; permissions: AuthResponse["user"]["permissions"]; onChange: (tab: AppTab) => void }) {
   const managerItems: Array<{ tab: AppTab; label: string; icon: typeof Home }> = [
-    { tab: "home", label: "Home", icon: Home },
-    { tab: "verify", label: "Verify", icon: ShieldCheck },
-    { tab: "insights", label: "Insights", icon: BarChart3 },
-    { tab: "summary", label: "Summary", icon: CalendarDays },
-    { tab: "staff", label: "Staff", icon: Users }
+    ...(permissions.dashboard ? [{ tab: "home" as AppTab, label: "Home", icon: Home }] : []),
+    ...(permissions.verify ? [{ tab: "verify" as AppTab, label: "Verify", icon: ShieldCheck }] : []),
+    ...(permissions.transactions ? [
+      { tab: "insights" as AppTab, label: "Insights", icon: BarChart3 },
+      { tab: "summary" as AppTab, label: "Summary", icon: CalendarDays }
+    ] : []),
+    ...(permissions.staff ? [{ tab: "staff" as AppTab, label: "Staff", icon: Users }] : [])
   ];
   const waiterItems: Array<{ tab: AppTab; label: string; icon: typeof Home }> = [
-    { tab: "verify", label: "Verify", icon: ShieldCheck },
-    { tab: "sales", label: "Sales", icon: ReceiptText }
+    ...(permissions.verify ? [{ tab: "verify" as AppTab, label: "Verify", icon: ShieldCheck }] : []),
+    ...(permissions.sales ? [{ tab: "sales" as AppTab, label: "Sales", icon: ReceiptText }] : [])
   ];
   const items = role === "manager" ? managerItems : waiterItems;
 
   return (
-    <nav className={`bottom-nav ${role}`}>
+    <nav className={`bottom-nav ${role}`} style={{ "--nav-items": Math.max(1, items.length) } as CSSProperties}>
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -1091,7 +1108,13 @@ function StaffScreen({
   error: string;
   onRefresh: () => Promise<void> | void;
 }) {
-  const [form, setForm] = useState({ username: "", fullName: "", password: "", role: "waiter" as StaffRole });
+  const [form, setForm] = useState({
+    username: "",
+    fullName: "",
+    password: "",
+    role: "waiter" as StaffRole,
+    permissions: defaultPermissionsForRole("waiter") as Partial<UserPermissions>
+  });
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1103,7 +1126,7 @@ function StaffScreen({
     setSaving(true);
     try {
       await api.createUser(token, form);
-      setForm({ username: "", fullName: "", password: "", role: "waiter" });
+      setForm({ username: "", fullName: "", password: "", role: "waiter", permissions: defaultPermissionsForRole("waiter") });
       setActionMessage("Staff user created.");
       await onRefresh();
     } catch (createError) {
@@ -1142,6 +1165,19 @@ function StaffScreen({
     }
   }
 
+  async function togglePermission(user: MobileStaffUser, module: UserModule) {
+    setActionMessage("");
+    setActionError("");
+    try {
+      const permissions: Partial<UserPermissions> = { [module]: !user.permissions[module] };
+      await api.updateUser(token, user.id, { permissions });
+      setActionMessage(`${user.username} permissions updated.`);
+      await onRefresh();
+    } catch (permissionError) {
+      setActionError(permissionError instanceof Error ? permissionError.message : "Could not update permissions");
+    }
+  }
+
   const staffUsers = users.filter((user) => user.role !== "admin");
 
   return (
@@ -1158,11 +1194,29 @@ function StaffScreen({
           <input placeholder="Username" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
           <input placeholder="Full name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
           <div className="form-grid">
-            <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as StaffRole })}>
+            <select value={form.role} onChange={(event) => {
+              const role = event.target.value as StaffRole;
+              setForm({ ...form, role, permissions: defaultPermissionsForRole(role) });
+            }}>
               <option value="waiter">Waiter</option>
               <option value="manager">Business admin</option>
             </select>
             <input placeholder="Temporary password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+          </div>
+          <div className="permission-grid">
+            {permissionLabels.map((permission) => (
+              <label key={permission.key}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.permissions[permission.key])}
+                  onChange={(event) => setForm({
+                    ...form,
+                    permissions: { ...form.permissions, [permission.key]: event.target.checked }
+                  })}
+                />
+                <span>{permission.label}</span>
+              </label>
+            ))}
           </div>
           <button className="primary-button" disabled={saving || !form.username || !form.fullName || !form.password} type="submit">
             {saving ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
@@ -1195,6 +1249,19 @@ function StaffScreen({
                 <div>
                   <strong>{user.fullName}</strong>
                   <span>{user.role === "manager" ? "Business admin" : "Waiter"} - {user.disabled ? "disabled" : "active"}</span>
+                  <div className="permission-pills">
+                    {permissionLabels.map((permission) => (
+                      <button
+                        key={permission.key}
+                        type="button"
+                        className={user.permissions[permission.key] ? "active" : ""}
+                        disabled={user.id === currentUserId}
+                        onClick={() => void togglePermission(user, permission.key)}
+                      >
+                        {permission.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="row-actions">
                   <button type="button" onClick={() => void resetPassword(user)}>
@@ -1262,12 +1329,13 @@ export function App() {
 
   const refreshManagerData = useCallback(async () => {
     if (!auth || auth.user.role !== "manager") return;
+    if (!auth.user.permissions.dashboard && !auth.user.permissions.transactions) return;
     setDataStatus("loading");
     setDataError("");
     try {
       const [nextDashboard, nextPayments] = await Promise.all([
-        api.businessDashboard(auth.accessToken),
-        loadTransactionArchive(auth.accessToken)
+        auth.user.permissions.dashboard ? api.businessDashboard(auth.accessToken) : Promise.resolve(null),
+        auth.user.permissions.transactions ? loadTransactionArchive(auth.accessToken) : Promise.resolve([])
       ]);
       setDashboard(nextDashboard);
       setPayments(nextPayments);
@@ -1280,6 +1348,7 @@ export function App() {
 
   const refreshUsers = useCallback(async () => {
     if (!auth || auth.user.role !== "manager") return;
+    if (!auth.user.permissions.staff) return;
     setUsersStatus("loading");
     setUsersError("");
     try {
@@ -1294,6 +1363,7 @@ export function App() {
 
   const refreshWaiterSales = useCallback(async () => {
     if (!auth || auth.user.role !== "waiter") return;
+    if (!auth.user.permissions.sales) return;
     setSalesStatus("loading");
     setSalesError("");
     try {
@@ -1307,22 +1377,22 @@ export function App() {
   }, [auth]);
 
   useEffect(() => {
-    if (auth?.user.role === "manager") {
+    if (auth?.user.role === "manager" && (auth.user.permissions.dashboard || auth.user.permissions.transactions)) {
       void refreshManagerData();
     }
-  }, [auth?.accessToken, auth?.user.role, refreshManagerData]);
+  }, [auth?.accessToken, auth?.user.role, auth?.user.permissions.dashboard, auth?.user.permissions.transactions, refreshManagerData]);
 
   useEffect(() => {
-    if (auth?.user.role === "manager" && tab === "staff" && usersStatus === "idle") {
+    if (auth?.user.role === "manager" && auth.user.permissions.staff && tab === "staff" && usersStatus === "idle") {
       void refreshUsers();
     }
-  }, [auth?.user.role, refreshUsers, tab, usersStatus]);
+  }, [auth?.user.role, auth?.user.permissions.staff, refreshUsers, tab, usersStatus]);
 
   useEffect(() => {
-    if (auth?.user.role === "waiter" && tab === "sales" && salesStatus === "idle") {
+    if (auth?.user.role === "waiter" && auth.user.permissions.sales && tab === "sales" && salesStatus === "idle") {
       void refreshWaiterSales();
     }
-  }, [auth?.user.role, refreshWaiterSales, salesStatus, tab]);
+  }, [auth?.user.role, auth?.user.permissions.sales, refreshWaiterSales, salesStatus, tab]);
 
   function handleLogin(nextAuth: AuthResponse) {
     setAuth(nextAuth);
@@ -1394,7 +1464,7 @@ export function App() {
           onLogout={() => void logout()}
         />
 
-        {isManager && tab === "home" ? (
+        {isManager && auth.user.permissions.dashboard && tab === "home" ? (
           <HomeScreen
             analytics={analytics}
             dashboard={dashboard}
@@ -1405,12 +1475,12 @@ export function App() {
           />
         ) : null}
 
-        {tab === "verify" ? (
+        {auth.user.permissions.verify && tab === "verify" ? (
           <VerifyScreen token={auth.accessToken} onVerified={isManager ? updateVerifiedPayment : isWaiter ? updateWaiterSale : undefined} />
         ) : null}
-        {isManager && tab === "insights" ? <InsightsScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
-        {isManager && tab === "summary" ? <SummaryScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
-        {isManager && tab === "staff" ? (
+        {isManager && auth.user.permissions.transactions && tab === "insights" ? <InsightsScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
+        {isManager && auth.user.permissions.transactions && tab === "summary" ? <SummaryScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
+        {isManager && auth.user.permissions.staff && tab === "staff" ? (
           <StaffScreen
             currentUserId={auth.user.id}
             error={usersError}
@@ -1420,7 +1490,7 @@ export function App() {
             users={users}
           />
         ) : null}
-        {isWaiter && tab === "sales" ? (
+        {isWaiter && auth.user.permissions.sales && tab === "sales" ? (
           <StaffSalesScreen
             error={salesError}
             onRefresh={() => void refreshWaiterSales()}
@@ -1430,7 +1500,7 @@ export function App() {
         ) : null}
       </main>
 
-      {isManager || isWaiter ? <BottomNav onChange={setTab} role={auth.user.role as StaffRole} tab={tab} /> : null}
+      {isManager || isWaiter ? <BottomNav onChange={setTab} permissions={auth.user.permissions} role={auth.user.role as StaffRole} tab={tab} /> : null}
     </>
   );
 }

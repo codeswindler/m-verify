@@ -1,22 +1,23 @@
 import { Router } from "express";
 import { z } from "zod";
-import { createUserSchema, updateUserSchema } from "@m-verify/shared";
+import { createUserSchema, defaultPermissionsForRole, updateUserSchema } from "@m-verify/shared";
 import type { UserRole } from "@m-verify/shared";
 import type { DbParam, ResultSetHeader, RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
 import { SYSTEM_TENANT_ID } from "../constants.js";
 import { AppError, asyncHandler } from "../http.js";
-import { requireAuth, requireRoles } from "../middleware/auth.js";
+import { requireAuth, requirePermission, requireRoles } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import type { AuthContext } from "../types.js";
 import { hashPassword } from "../utils/security.js";
-import { toSafeUser } from "../utils/format.js";
+import { parseUserPermissions, toSafeUser } from "../utils/format.js";
 
 type UserRow = RowDataPacket & {
   id: number;
   username: string;
   full_name: string;
   role: UserRole;
+  module_permissions: string | null;
   disabled: number;
   tenant_id: number | null;
   tenant_name: string | null;
@@ -30,7 +31,7 @@ const idParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 
 export const usersRouter = Router();
 
-usersRouter.use("/users", requireAuth, requireRoles("admin", "manager"));
+usersRouter.use("/users", requireAuth, requireRoles("admin", "manager"), requirePermission("staff"));
 
 async function ensureTenantExists(tenantId: number, options: { allowSystemTenant?: boolean } = {}): Promise<void> {
   const clauses = ["id = ?", "status = 'active'"];
@@ -56,7 +57,7 @@ usersRouter.get(
     const where = auth.user.role === "admin" ? "" : "WHERE u.tenant_id = ?";
     const params: DbParam[] = auth.user.role === "admin" ? [] : [auth.user.tenantId ?? -1];
     const [rows] = await pool.execute<UserRow[]>(
-      `SELECT u.id, u.username, u.full_name, u.role, u.disabled, u.tenant_id, t.name AS tenant_name,
+      `SELECT u.id, u.username, u.full_name, u.role, u.module_permissions, u.disabled, u.tenant_id, t.name AS tenant_name,
         u.last_login_at, u.created_at
        FROM users u
        LEFT JOIN tenants t ON t.id = u.tenant_id
@@ -96,14 +97,22 @@ usersRouter.post(
 
     try {
       const [result] = await pool.execute<ResultSetHeader>(
-        "INSERT INTO users (tenant_id, username, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?)",
-        [tenantId, body.username, passwordHash, body.fullName, body.role]
+        "INSERT INTO users (tenant_id, username, password_hash, full_name, role, module_permissions) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          tenantId,
+          body.username,
+          passwordHash,
+          body.fullName,
+          body.role,
+          JSON.stringify({ ...defaultPermissionsForRole(body.role), ...(body.permissions ?? {}) })
+        ]
       );
       response.status(201).json({
         id: Number(result.insertId),
         username: body.username,
         fullName: body.fullName,
         role: body.role,
+        permissions: { ...defaultPermissionsForRole(body.role), ...(body.permissions ?? {}) },
         disabled: false,
         tenantId,
         tenantName: null
@@ -134,6 +143,9 @@ usersRouter.patch(
     if (auth.user.id === id && body.disabled === true) {
       throw new AppError(403, "You cannot disable your own account", "FORBIDDEN");
     }
+    if (auth.user.id === id && body.permissions !== undefined) {
+      throw new AppError(403, "You cannot change your own module permissions", "FORBIDDEN");
+    }
     if (auth.user.role !== "admin" && body.role === "admin") {
       throw new AppError(403, "Business managers cannot assign platform admin permissions", "FORBIDDEN");
     }
@@ -153,6 +165,16 @@ usersRouter.patch(
     if (body.role !== undefined) {
       updates.push("role = ?");
       params.push(body.role);
+    }
+    if (body.permissions !== undefined || body.role !== undefined) {
+      const baseRole = body.role ?? target.role;
+      const currentPermissions = parseUserPermissions(target.module_permissions, baseRole);
+      updates.push("module_permissions = ?");
+      params.push(JSON.stringify({
+        ...defaultPermissionsForRole(baseRole),
+        ...currentPermissions,
+        ...(body.permissions ?? {})
+      }));
     }
     if (body.tenantId !== undefined) {
       if (auth.user.role !== "admin") {
@@ -191,7 +213,7 @@ usersRouter.patch(
     }
 
     const [rows] = await pool.execute<UserRow[]>(
-      `SELECT u.id, u.username, u.full_name, u.role, u.disabled, u.tenant_id, t.name AS tenant_name,
+      `SELECT u.id, u.username, u.full_name, u.role, u.module_permissions, u.disabled, u.tenant_id, t.name AS tenant_name,
         u.last_login_at, u.created_at
        FROM users u
        LEFT JOIN tenants t ON t.id = u.tenant_id
@@ -206,7 +228,7 @@ async function getScopedUser(id: number, auth: AuthContext): Promise<UserRow | n
   const where = auth.user.role === "admin" ? "u.id = ?" : "u.id = ? AND u.tenant_id = ?";
   const params: DbParam[] = auth.user.role === "admin" ? [id] : [id, auth.user.tenantId ?? -1];
   const [rows] = await pool.execute<UserRow[]>(
-    `SELECT u.id, u.username, u.full_name, u.role, u.disabled, u.tenant_id, t.name AS tenant_name,
+    `SELECT u.id, u.username, u.full_name, u.role, u.module_permissions, u.disabled, u.tenant_id, t.name AS tenant_name,
       u.last_login_at, u.created_at
      FROM users u
      LEFT JOIN tenants t ON t.id = u.tenant_id

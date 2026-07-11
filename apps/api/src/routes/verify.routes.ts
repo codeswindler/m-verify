@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { paymentVerificationSearchSchema, verifyPaymentSchema } from "@m-verify/shared";
 import { asyncHandler } from "../http.js";
-import { requireAuth, requireRoles } from "../middleware/auth.js";
+import { requireAuth, requirePermission, requireRoles } from "../middleware/auth.js";
 import { verifyRateLimit } from "../middleware/rate-limits.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { lookupPayment, searchReceivedPayments, verifyPayment } from "../services/verification.js";
@@ -13,6 +13,7 @@ verifyRouter.get(
   verifyRateLimit,
   requireAuth,
   requireRoles("manager", "waiter"),
+  requirePermission("verify"),
   validateQuery(paymentVerificationSearchSchema),
   asyncHandler(async (request, response) => {
     const query = request.query as unknown as typeof paymentVerificationSearchSchema._type;
@@ -26,6 +27,7 @@ verifyRouter.post(
   verifyRateLimit,
   requireAuth,
   requireRoles("admin", "manager", "waiter"),
+  requirePermission("verify"),
   validateBody(verifyPaymentSchema),
   asyncHandler(async (request, response) => {
     const result = await lookupPayment(request.body as typeof verifyPaymentSchema._type, {
@@ -42,6 +44,7 @@ verifyRouter.post(
   verifyRateLimit,
   requireAuth,
   requireRoles("admin", "manager", "waiter"),
+  requirePermission("verify"),
   validateBody(verifyPaymentSchema),
   asyncHandler(async (request, response) => {
     const result = await verifyPayment(request.body as typeof verifyPaymentSchema._type, {

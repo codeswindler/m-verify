@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(120) NOT NULL,
   role ENUM('admin', 'manager', 'waiter') NOT NULL DEFAULT 'waiter',
+  module_permissions JSON NULL,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
   last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
