@@ -128,6 +128,12 @@ usersRouter.patch(
     if (!target) {
       throw new AppError(404, "User not found", "USER_NOT_FOUND");
     }
+    if (auth.user.id === id && body.role !== undefined && body.role !== auth.user.role) {
+      throw new AppError(403, "You cannot change your own role", "FORBIDDEN");
+    }
+    if (auth.user.id === id && body.disabled === true) {
+      throw new AppError(403, "You cannot disable your own account", "FORBIDDEN");
+    }
     if (auth.user.role !== "admin" && body.role === "admin") {
       throw new AppError(403, "Business managers cannot assign platform admin permissions", "FORBIDDEN");
     }

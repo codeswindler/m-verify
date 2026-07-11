@@ -16,7 +16,15 @@ import { transactionsRouter } from "./routes/transactions.routes.js";
 import { usersRouter } from "./routes/users.routes.js";
 import { verifyRouter } from "./routes/verify.routes.js";
 
-const tauriDesktopOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
+const nativeAppOrigins = new Set([
+  "tauri://localhost",
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+  "capacitor://localhost",
+  "ionic://localhost",
+  "http://localhost",
+  "https://localhost"
+]);
 
 function compareVersions(left: string, right: string): number {
   const leftParts = left.split(".").map((part) => Number(part.replace(/\D+.*/, "")) || 0);
@@ -41,12 +49,12 @@ export function createApp() {
           !origin ||
           config.corsOrigins.length === 0 ||
           config.corsOrigins.includes(origin) ||
-          tauriDesktopOrigins.has(origin)
+          nativeAppOrigins.has(origin)
         ) {
           callback(null, true);
           return;
         }
-        callback(new Error(`CORS origin not allowed: ${origin}`));
+        callback(null, false);
       },
       credentials: true
     })

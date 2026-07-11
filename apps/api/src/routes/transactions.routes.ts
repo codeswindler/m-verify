@@ -51,6 +51,12 @@ function buildPaymentWhere(
     params.push(query.tenantId);
   }
 
+  if (auth.user.role === "waiter") {
+    clauses.push("p.verified_status = TRUE");
+    clauses.push("p.verified_by = ?");
+    params.push(auth.user.id);
+  }
+
   if (query.search) {
     clauses.push("(p.transaction_code LIKE ? OR p.phone_number LIKE ? OR p.reference LIKE ? OR p.customer_name LIKE ? OR t.name LIKE ?)");
     params.push(
@@ -109,7 +115,7 @@ FROM payments p
 LEFT JOIN tenants t ON t.id = p.tenant_id
 LEFT JOIN users u ON u.id = p.verified_by`;
 
-transactionsRouter.use("/transactions", requireAuth, requireRoles("admin", "manager"));
+transactionsRouter.use("/transactions", requireAuth, requireRoles("admin", "manager", "waiter"));
 
 transactionsRouter.get(
   "/transactions/export.csv",
@@ -118,7 +124,7 @@ transactionsRouter.get(
     const query = request.query as unknown as typeof listQuerySchema._type;
     const { where, params } = buildPaymentWhere(query, request.auth!);
     const [rows] = await pool.execute<PaymentRow[]>(
-      `${paymentSelect} ${where} ORDER BY p.payment_time DESC, p.id DESC LIMIT 10000`,
+      `${paymentSelect} ${where} ORDER BY ${request.auth!.user.role === "waiter" ? "p.verified_at" : "p.payment_time"} DESC, p.id DESC LIMIT 10000`,
       params
     );
     const payments = rows.map(mapPayment).map((payment) => ({
@@ -173,7 +179,7 @@ transactionsRouter.get(
     const offsetSql = Number(offset);
 
     const [rows] = await pool.execute<PaymentRow[]>(
-      `${paymentSelect} ${where} ORDER BY p.payment_time DESC, p.id DESC LIMIT ${limitSql} OFFSET ${offsetSql}`,
+      `${paymentSelect} ${where} ORDER BY ${request.auth!.user.role === "waiter" ? "p.verified_at" : "p.payment_time"} DESC, p.id DESC LIMIT ${limitSql} OFFSET ${offsetSql}`,
       params
     );
     const [countRows] = await pool.execute<CountRow[]>(
@@ -195,11 +201,15 @@ transactionsRouter.get(
   asyncHandler(async (request, response) => {
     const { id } = idParamsSchema.parse(request.params);
     const tenantClause = request.auth!.user.role === "admin" ? "" : " AND p.tenant_id = ?";
+    const waiterClause = request.auth!.user.role === "waiter" ? " AND p.verified_status = TRUE AND p.verified_by = ?" : "";
     const params: DbParam[] = [id];
     if (request.auth!.user.role !== "admin") {
       params.push(request.auth!.user.tenantId ?? -1);
     }
-    const [rows] = await pool.execute<PaymentRow[]>(`${paymentSelect} WHERE p.id = ?${tenantClause} LIMIT 1`, params);
+    if (request.auth!.user.role === "waiter") {
+      params.push(request.auth!.user.id);
+    }
+    const [rows] = await pool.execute<PaymentRow[]>(`${paymentSelect} WHERE p.id = ?${tenantClause}${waiterClause} LIMIT 1`, params);
     const row = rows[0];
     if (!row) {
       throw new AppError(404, "Transaction not found", "TRANSACTION_NOT_FOUND");

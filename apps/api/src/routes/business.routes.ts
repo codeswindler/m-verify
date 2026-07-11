@@ -10,6 +10,7 @@ type BusinessKpiRow = RowDataPacket & {
   transaction_count: number;
   total_volume: string | null;
   today_volume: string | null;
+  month_volume: string | null;
   verified_count: number;
 };
 
@@ -82,6 +83,10 @@ businessRouter.get(
         COUNT(p.id) AS transaction_count,
         COALESCE(SUM(p.amount), 0) AS total_volume,
         COALESCE(SUM(CASE WHEN DATE(COALESCE(p.payment_time, p.created_at)) = UTC_DATE() THEN p.amount ELSE 0 END), 0) AS today_volume,
+        COALESCE(SUM(CASE
+          WHEN COALESCE(p.payment_time, p.created_at) >= DATE_FORMAT(UTC_DATE(), '%Y-%m-01')
+           AND COALESCE(p.payment_time, p.created_at) < DATE_ADD(LAST_DAY(UTC_DATE()), INTERVAL 1 DAY)
+          THEN p.amount ELSE 0 END), 0) AS month_volume,
         COUNT(CASE WHEN p.verified_status = TRUE THEN 1 END) AS verified_count
        FROM payments p
        WHERE p.tenant_id = ? AND p.status = 'PAID'`,
@@ -121,6 +126,7 @@ businessRouter.get(
         paidTransactions: Number(summary?.transaction_count ?? 0),
         totalPaymentVolume: String(summary?.total_volume ?? "0"),
         todayPaymentVolume: String(summary?.today_volume ?? "0"),
+        monthPaymentVolume: String(summary?.month_volume ?? "0"),
         verifiedTransactions: Number(summary?.verified_count ?? 0),
         staffUsers: Number(staff?.staff_count ?? 0),
         activeStaffUsers: Number(staff?.active_staff_count ?? 0)

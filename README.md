@@ -5,6 +5,7 @@ M-Verify is a standalone payment verification tool for clubs, restaurants, and b
 ## What Is Included
 
 - Tauri v2 Windows desktop app in `apps/desktop`
+- Capacitor Android mobile app in `apps/mobile`
 - Node.js/Express API in `apps/api`
 - React admin panel in `apps/admin`
 - Shared TypeScript contracts in `packages/shared`
@@ -18,6 +19,7 @@ M-Verify is a standalone payment verification tool for clubs, restaurants, and b
 - Node.js 22+ and pnpm
 - Docker Desktop for the easiest MySQL/API/admin setup
 - For Windows `.exe` builds: Rust/Cargo, Microsoft C++ Build Tools, and WebView2 Runtime
+- For Android `.apk` builds: Android Studio or Android SDK/JDK with Gradle support
 
 Tauri references:
 - [Prerequisites](https://v2.tauri.app/start/prerequisites/)
@@ -71,6 +73,7 @@ Default seed login:
 ```powershell
 pnpm dev:api
 pnpm dev:admin
+pnpm dev:mobile
 pnpm dev:desktop
 pnpm build
 pnpm test
@@ -81,9 +84,17 @@ Admin panel:
 - Local Vite dev: `http://localhost:5173`
 - Docker build: `http://localhost:8080`
 
+Mobile app:
+
+- Local Vite dev: `http://localhost:5174`
+- Preview build: `pnpm --filter @m-verify/mobile preview`
+- Android debug APK: `pnpm --filter @m-verify/mobile android:debug`
+
 API:
 
 - `http://localhost:4000`
+
+For a phone-installed APK, build with `VITE_API_BASE_URL` set to a public HTTPS API URL or a LAN URL the phone can reach. `http://localhost:4000` works only when the app runs on the same machine as the API.
 
 ## Live Deployment
 

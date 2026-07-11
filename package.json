@@ -7,8 +7,10 @@
   "scripts": {
     "dev:api": "pnpm --filter @m-verify/api dev",
     "dev:admin": "pnpm --filter @m-verify/admin dev",
+    "dev:mobile": "pnpm --filter @m-verify/mobile dev",
     "dev:desktop": "pnpm --filter @m-verify/desktop tauri:dev",
-    "build": "pnpm --filter @m-verify/shared build && pnpm --filter @m-verify/api build && pnpm --filter @m-verify/admin build && pnpm --filter @m-verify/desktop build:web",
+    "build": "pnpm --filter @m-verify/shared build && pnpm --filter @m-verify/api build && pnpm --filter @m-verify/admin build && pnpm --filter @m-verify/mobile build && pnpm --filter @m-verify/desktop build:web",
+    "build:mobile": "pnpm --filter @m-verify/mobile build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @m-verify/api test",
     "db:migrate": "pnpm --filter @m-verify/api db:migrate",
