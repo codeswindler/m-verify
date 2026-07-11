@@ -26,7 +26,6 @@ import {
 import { defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
 import {
   api,
-  API_BASE_URL,
   loadTransactionArchive,
   type BusinessDashboard,
   type MobileStaffUser
@@ -372,8 +371,6 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
             {status === "loading" ? "Signing in" : "Sign in securely"}
           </button>
         </form>
-
-        <p className="api-note">{API_BASE_URL}</p>
       </section>
     </main>
   );
@@ -710,17 +707,17 @@ function HomeScreen({
   const recentPayments = dashboard?.recentPayments.length ? dashboard.recentPayments : analytics.filteredPayments.slice(0, 5);
   const todayCollections = Number(dashboard?.kpis.todayPaymentVolume ?? analytics.todayTotal);
   const monthCollections = Number(dashboard?.kpis.monthPaymentVolume ?? analytics.monthTotal);
+  const staffCount = dashboard?.kpis.staffUsers ?? 0;
 
   return (
     <section className="screen-stack">
       {error ? <ErrorBanner message={error} onRetry={onRefresh} /> : null}
       <section className="hero-card">
         <div className="hero-heading">
-          <p className="eyebrow">Business settlement</p>
-          <span className="count-badge">{dashboard?.kpis.paidTransactions ?? analytics.count} payments</span>
+          <p className="eyebrow">Business Dashboard</p>
         </div>
-        <h2>{money(dashboard?.kpis.totalPaymentVolume ?? analytics.total)}</h2>
-        <p>{status === "loading" ? "Refreshing latest business activity" : `${money(todayCollections)} net today`}</p>
+        <h2>{money(todayCollections)}</h2>
+        <p>{status === "loading" ? "Refreshing latest business activity" : `This month ${money(monthCollections)}`}</p>
       </section>
 
       <div className="collection-grid">
@@ -729,7 +726,7 @@ function HomeScreen({
             <CalendarDays size={20} />
           </span>
           <div>
-            <span>Today net</span>
+            <span>Today</span>
             <strong>{money(todayCollections)}</strong>
             <small>{inputDate(new Date())}</small>
           </div>
@@ -739,9 +736,19 @@ function HomeScreen({
             <WalletCards size={20} />
           </span>
           <div>
-            <span>This month net</span>
+            <span>This month</span>
             <strong>{money(monthCollections)}</strong>
             <small>{monthTitle(new Date())}</small>
+          </div>
+        </article>
+        <article className="collection-card">
+          <span className="collection-icon">
+            <Users size={20} />
+          </span>
+          <div>
+            <span>Staff</span>
+            <strong>{staffCount}</strong>
+            <small>Active business users</small>
           </div>
         </article>
       </div>
@@ -831,7 +838,7 @@ function InsightsScreen({ payments, settlementRate }: { payments: PaymentSummary
 
       <section className="insight-total-card">
         <div>
-          <p className="eyebrow">{presetLabel(preset)} settlement</p>
+          <p className="eyebrow">{presetLabel(preset)} activity</p>
           <strong>{money(analytics.total)}</strong>
           <span>{analytics.count} payments in this filter</span>
         </div>
@@ -845,7 +852,7 @@ function InsightsScreen({ payments, settlementRate }: { payments: PaymentSummary
         <div className="section-heading compact">
           <div>
             <p className="eyebrow">Revenue trend</p>
-            <h2>Daily settlement</h2>
+            <h2>Daily activity</h2>
             <p>Compared with {money(trend.previousTotal, true)} in the previous period</p>
           </div>
           <BarChart3 size={20} />

@@ -217,7 +217,6 @@ function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; upd
         <div className="login-mark">
           <ShieldCheck size={42} />
           <h1>Staff login</h1>
-          <p>{API_BASE_URL}</p>
         </div>
 
         <label>
@@ -477,7 +476,7 @@ function DashboardView({ token }: { token: string }) {
       <div className="view-heading">
         <div>
           <h2>Dashboard</h2>
-          <p>Business activity</p>
+          <p>Business activity overview</p>
         </div>
         <button type="button" className="small-button" onClick={() => void load()} disabled={loading}>
           <RefreshCw size={13} />
@@ -485,10 +484,9 @@ function DashboardView({ token }: { token: string }) {
       </div>
       {error && <div className="error">{error}</div>}
       <div className="kpi-grid">
-        <KpiCard label="Payments" value={String(dashboard?.kpis.paidTransactions ?? 0)} />
-        <KpiCard label="Volume" value={`KES ${formatAmount(dashboard?.kpis.totalPaymentVolume ?? 0)}`} />
         <KpiCard label="Today" value={`KES ${formatAmount(dashboard?.kpis.todayPaymentVolume ?? 0)}`} />
-        <KpiCard label="Staff" value={String(dashboard?.kpis.activeStaffUsers ?? 0)} />
+        <KpiCard label="This Month" value={`KES ${formatAmount(dashboard?.kpis.monthPaymentVolume ?? 0)}`} />
+        <KpiCard label="Staff" value={String(dashboard?.kpis.staffUsers ?? 0)} />
       </div>
       <div className="panel-list">
         <h3>Recent payments</h3>

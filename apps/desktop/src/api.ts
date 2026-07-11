@@ -14,6 +14,7 @@ export type BusinessDashboard = {
     paidTransactions: number;
     totalPaymentVolume: string;
     todayPaymentVolume: string;
+    monthPaymentVolume: string;
     verifiedTransactions: number;
     staffUsers: number;
     activeStaffUsers: number;

@@ -151,13 +151,6 @@ dl {
   text-transform: uppercase;
 }
 
-.api-note {
-  overflow-wrap: anywhere;
-  color: #6f7e76;
-  font-size: 0.74rem;
-  text-align: center;
-}
-
 .primary-button,
 .icon-button,
 .bottom-nav button,
