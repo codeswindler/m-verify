@@ -175,6 +175,11 @@ function darajaErrorMessage(payload: DarajaRegisterResponse & DarajaTokenRespons
   return rawMessage;
 }
 
+function isAlreadyRegisteredDarajaResponse(payload: DarajaRegisterResponse & DarajaTokenResponse): boolean {
+  const message = String(payload.errorMessage ?? payload.ResponseDescription ?? payload.error ?? "").toLowerCase();
+  return payload.errorCode === "500.003.1001" || message.includes("already registered");
+}
+
 async function requestDarajaAccessToken(credentials: MpesaCredentialRow): Promise<string> {
   const consumerKey = decryptCredential(credentials.consumer_key_encrypted);
   const consumerSecret = decryptCredential(credentials.consumer_secret_encrypted);
@@ -235,6 +240,14 @@ async function registerDarajaCallbacks(credentials: MpesaCredentialRow): Promise
   const payload = await readDarajaJson(response);
 
   if (!response.ok) {
+    if (isAlreadyRegisteredDarajaResponse(payload)) {
+      return {
+        ...payload,
+        alreadyRegistered: true,
+        ResponseDescription: payload.ResponseDescription ?? payload.errorMessage ?? "Daraja callback URLs are already registered."
+      };
+    }
+
     throw new AppError(
       502,
       darajaErrorMessage(payload, "Daraja callback registration failed."),

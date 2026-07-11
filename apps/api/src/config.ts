@@ -73,10 +73,10 @@ export const config = {
       "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
     c2bRegisterSandboxUrl:
       process.env.DARAJA_C2B_REGISTER_SANDBOX_URL ??
-      "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl",
+      "https://sandbox.safaricom.co.ke/mpesa/c2b/v2/registerurl",
     c2bRegisterProductionUrl:
       process.env.DARAJA_C2B_REGISTER_PRODUCTION_URL ??
-      "https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl"
+      "https://api.safaricom.co.ke/mpesa/c2b/v2/registerurl"
   },
   rateLimit: {
     windowMs: toNumber("RATE_LIMIT_WINDOW_MS", 60_000),
