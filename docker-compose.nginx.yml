@@ -28,7 +28,7 @@ services:
     environment:
       NODE_ENV: production
       MYSQL_HOST: mysql
-      TRUST_PROXY: "true"
+      TRUST_PROXY: "1"
     ports:
       - "127.0.0.1:${API_HOST_PORT:-4400}:4000"
     depends_on:

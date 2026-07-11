@@ -16,6 +16,17 @@ function toBoolean(name: string, fallback: boolean): boolean {
   return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
 }
 
+function toTrustProxy(name: string): boolean | number {
+  const raw = process.env[name];
+  if (!raw) return false;
+  const normalized = raw.toLowerCase();
+  if (["true", "yes", "on"].includes(normalized)) return true;
+  if (["false", "no", "off"].includes(normalized)) return false;
+  const value = Number(raw);
+  if (Number.isInteger(value) && value >= 0) return value;
+  throw new Error(`${name} must be true, false, or a non-negative integer`);
+}
+
 function splitCsv(value: string | undefined): string[] {
   return (value ?? "")
     .split(",")
@@ -35,7 +46,7 @@ export const config = {
   isProduction: nodeEnv === "production",
   port: toNumber("API_PORT", 4000),
   publicApiBaseUrl: process.env.PUBLIC_API_BASE_URL ?? `http://localhost:${toNumber("API_PORT", 4000)}`,
-  trustProxy: toBoolean("TRUST_PROXY", false),
+  trustProxy: toTrustProxy("TRUST_PROXY"),
   corsOrigins: splitCsv(process.env.CORS_ORIGINS),
   db: {
     host: process.env.MYSQL_HOST ?? "127.0.0.1",

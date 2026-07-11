@@ -1116,23 +1116,6 @@ function StaffScreen({
     }
   }
 
-  async function changeRole(user: MobileStaffUser) {
-    setActionMessage("");
-    setActionError("");
-    if (user.id === currentUserId) {
-      setActionError("You cannot change your own role from staff access.");
-      return;
-    }
-    const nextRole = user.role === "manager" ? "waiter" : "manager";
-    try {
-      await api.updateUser(token, user.id, { role: nextRole });
-      setActionMessage(`${user.username} is now ${nextRole === "manager" ? "a business admin" : "a waiter"}.`);
-      await onRefresh();
-    } catch (roleError) {
-      setActionError(roleError instanceof Error ? roleError.message : "Could not change user role");
-    }
-  }
-
   async function resetPassword(user: MobileStaffUser) {
     const password = window.prompt(`New password for ${user.username}`);
     if (!password) return;
@@ -1201,9 +1184,6 @@ function StaffScreen({
                   <span>{user.role === "manager" ? "Business admin" : "Waiter"} - {user.disabled ? "disabled" : "active"}</span>
                 </div>
                 <div className="row-actions">
-                  <button type="button" onClick={() => void changeRole(user)}>
-                    {user.role === "manager" ? "Make waiter" : "Make biz admin"}
-                  </button>
                   <button type="button" onClick={() => void resetPassword(user)}>
                     Password
                   </button>

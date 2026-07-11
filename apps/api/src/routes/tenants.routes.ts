@@ -167,6 +167,14 @@ async function readDarajaJson(response: Response): Promise<DarajaRegisterRespons
   }
 }
 
+function darajaErrorMessage(payload: DarajaRegisterResponse & DarajaTokenResponse, fallback: string): string {
+  const rawMessage = payload.errorMessage ?? payload.ResponseDescription ?? payload.error ?? fallback;
+  if (rawMessage.toLowerCase().includes("invalid access token")) {
+    return "Daraja rejected the access token. Confirm this business has the correct sandbox/production environment, consumer key, consumer secret, shortcode, and C2B product access.";
+  }
+  return rawMessage;
+}
+
 async function requestDarajaAccessToken(credentials: MpesaCredentialRow): Promise<string> {
   const consumerKey = decryptCredential(credentials.consumer_key_encrypted);
   const consumerSecret = decryptCredential(credentials.consumer_secret_encrypted);
@@ -187,7 +195,7 @@ async function requestDarajaAccessToken(credentials: MpesaCredentialRow): Promis
   if (!response.ok || !payload.access_token) {
     throw new AppError(
       502,
-      payload.errorMessage ?? payload.error ?? "Daraja token request failed.",
+      darajaErrorMessage(payload, "Daraja token request failed."),
       "DARAJA_TOKEN_FAILED",
       payload
     );
@@ -221,7 +229,7 @@ async function registerDarajaCallbacks(credentials: MpesaCredentialRow): Promise
   if (!response.ok) {
     throw new AppError(
       502,
-      payload.errorMessage ?? payload.ResponseDescription ?? "Daraja callback registration failed.",
+      darajaErrorMessage(payload, "Daraja callback registration failed."),
       "DARAJA_REGISTER_FAILED",
       payload
     );

@@ -571,25 +571,6 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     }
   }
 
-  async function changeBusinessUserRole(user: AdminUser) {
-    const nextRole = user.role === "manager" ? "waiter" : "manager";
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      await api.updateUser(token, user.id, { role: nextRole });
-      setMessage("Business user role updated.");
-      notify("User role updated", `${user.username} is now ${nextRole === "manager" ? "a business admin" : "a waiter"}.`);
-      await loadBusinesses(selectedBusinessId);
-    } catch (err) {
-      const messageText = err instanceof Error ? err.message : "Could not change business user role";
-      setError(messageText);
-      notify("Role update failed", messageText, "error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function resetBusinessUserPassword(user: AdminUser) {
     const password = window.prompt(`New password for ${user.username}`);
     if (!password) return;
@@ -713,7 +694,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                           <td><span className="status">{user.role === "manager" ? "business admin" : user.role}</span></td>
                           <td><span className={`status ${user.disabled ? "status-failed" : "status-verified"}`}>{user.disabled ? "Disabled" : "Active"}</span></td>
                           <td className="cell-muted">{formatDate(user.lastLoginAt)}</td>
-                          <td className="actions"><button onClick={() => void changeBusinessUserRole(user)}>{user.role === "manager" ? "Make waiter" : "Make biz admin"}</button><button onClick={() => void toggleBusinessUser(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetBusinessUserPassword(user)}>Reset pw</button></td>
+                          <td className="actions"><button onClick={() => void toggleBusinessUser(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetBusinessUserPassword(user)}>Reset pw</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1092,26 +1073,6 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
     }
   }
 
-  async function changeRole(user: AdminUser) {
-    if (isPlatform) return;
-    if (user.id === auth.user.id) {
-      const messageText = "You cannot change your own role.";
-      setError(messageText);
-      notify("Role update blocked", messageText, "error");
-      return;
-    }
-    const nextRole = user.role === "manager" ? "waiter" : "manager";
-    try {
-      await api.updateUser(token, user.id, { role: nextRole });
-      notify("User role updated", `${user.username} is now ${nextRole === "manager" ? "a business admin" : "a waiter"}.`);
-      await load();
-    } catch (err) {
-      const messageText = err instanceof Error ? err.message : "Could not change user role";
-      setError(messageText);
-      notify("Role update failed", messageText, "error");
-    }
-  }
-
   async function resetPassword(user: AdminUser) {
     const password = window.prompt(`New password for ${user.username}`);
     if (!password) return;
@@ -1159,7 +1120,7 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
                   <td><span className="status">{user.role === "admin" ? "platform admin" : user.role === "manager" ? "business admin" : user.role}</span></td>
                   <td><span className={`status ${user.disabled ? "status-failed" : "status-verified"}`}>{user.disabled ? "Disabled" : "Active"}</span></td>
                   <td className="cell-muted">{formatDate(user.lastLoginAt)}</td>
-                  <td className="actions">{!isPlatform && <button onClick={() => void changeRole(user)}>{user.role === "manager" ? "Make waiter" : "Make biz admin"}</button>}<button onClick={() => void toggleDisabled(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetPassword(user)}>Reset pw</button></td>
+                  <td className="actions"><button onClick={() => void toggleDisabled(user)}>{user.disabled ? "Enable" : "Disable"}</button><button onClick={() => void resetPassword(user)}>Reset pw</button></td>
                 </tr>
               ))}
             </tbody>
