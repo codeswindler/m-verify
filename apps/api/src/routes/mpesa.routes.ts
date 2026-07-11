@@ -6,6 +6,7 @@ import { AppError, asyncHandler } from "../http.js";
 import { validateBody } from "../middleware/validate.js";
 import { normalizePayerIdentifier, normalizeTransactionCode, parseDarajaTime } from "../utils/format.js";
 import { isAllowedCallbackIp } from "../utils/security.js";
+import { handleStkCallback } from "../services/stk.js";
 
 export const mpesaRouter = Router();
 
@@ -138,4 +139,15 @@ mpesaRouter.post(
   "/:tenantSlug/c2b/confirmation",
   validateBody(darajaConfirmationSchema),
   asyncHandler(handleConfirmation)
+);
+
+mpesaRouter.post(
+  "/:tenantSlug/stk/result",
+  asyncHandler(async (request, response) => {
+    if (!isAllowedCallbackIp(request.ip ?? "")) {
+      throw new AppError(403, "Callback source IP is not allowed", "CALLBACK_IP_FORBIDDEN");
+    }
+    await handleStkCallback(request.body);
+    response.json({ ResultCode: 0, ResultDesc: "STK result received" });
+  })
 );

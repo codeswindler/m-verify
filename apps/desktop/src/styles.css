@@ -321,6 +321,27 @@ input:focus {
   justify-content: center;
 }
 
+.small-button.active {
+  border-color: #237a4b;
+  background: #eefbf3;
+  color: #155f38;
+  font-weight: 800;
+}
+
+.verify-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.stk-panel {
+  border: 1px solid #b9d8c6;
+  border-radius: 8px;
+  background: #f4fbf7;
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

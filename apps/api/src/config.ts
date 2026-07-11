@@ -76,7 +76,19 @@ export const config = {
       "https://sandbox.safaricom.co.ke/mpesa/c2b/v2/registerurl",
     c2bRegisterProductionUrl:
       process.env.DARAJA_C2B_REGISTER_PRODUCTION_URL ??
-      "https://api.safaricom.co.ke/mpesa/c2b/v2/registerurl"
+      "https://api.safaricom.co.ke/mpesa/c2b/v2/registerurl",
+    stkPushSandboxUrl:
+      process.env.DARAJA_STK_PUSH_SANDBOX_URL ??
+      "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+    stkPushProductionUrl:
+      process.env.DARAJA_STK_PUSH_PRODUCTION_URL ??
+      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+    stkQuerySandboxUrl:
+      process.env.DARAJA_STK_QUERY_SANDBOX_URL ??
+      "https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query",
+    stkQueryProductionUrl:
+      process.env.DARAJA_STK_QUERY_PRODUCTION_URL ??
+      "https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query"
   },
   rateLimit: {
     windowMs: toNumber("RATE_LIMIT_WINDOW_MS", 60_000),

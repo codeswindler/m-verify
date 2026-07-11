@@ -17,7 +17,7 @@ import {
   UserPlus,
   Users
 } from "lucide-react";
-import type { AuthResponse, PaymentSummary, VerificationResponse, VerificationStatus } from "@m-verify/shared";
+import type { AuthResponse, PaymentSummary, StkPromptResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
 import {
   api,
   API_BASE_URL,
@@ -255,6 +255,12 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [showStk, setShowStk] = useState(false);
+  const [stkPhone, setStkPhone] = useState("");
+  const [stkAmount, setStkAmount] = useState("");
+  const [stkReference, setStkReference] = useState("");
+  const [stkPrompt, setStkPrompt] = useState<StkPromptResponse | null>(null);
+  const [stkLoading, setStkLoading] = useState(false);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -314,8 +320,86 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
     }
   }
 
+  useEffect(() => {
+    if (!stkPrompt || !["REQUESTED", "PENDING"].includes(stkPrompt.status)) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = await api.getStkPrompt(auth.accessToken, stkPrompt.id);
+        setStkPrompt(next);
+        if (next.payment) {
+          setSelectedPayment(next.payment);
+          setPayments([next.payment]);
+          setQuery("");
+          setResult(null);
+        }
+      } catch (err) {
+        setStkPrompt((current) => current ? { ...current, status: "FAILED", message: err instanceof Error ? err.message : "Could not check STK prompt" } : current);
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [auth.accessToken, stkPrompt]);
+
+  async function sendStkPrompt() {
+    const amount = Number(stkAmount);
+    if (!stkPhone.trim() || !Number.isFinite(amount) || amount <= 0) {
+      setError("Enter customer phone and amount for STK prompt.");
+      return;
+    }
+    setStkLoading(true);
+    setError("");
+    setResult(null);
+    setStkPrompt(null);
+    try {
+      const response = await api.initiateStkPrompt(auth.accessToken, {
+        phoneNumber: stkPhone.trim(),
+        amount,
+        reference: stkReference.trim() || undefined
+      });
+      setStkPrompt(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "STK prompt failed");
+    } finally {
+      setStkLoading(false);
+    }
+  }
+
   return (
     <section className="view-stack">
+      <div className="verify-actions">
+        <button className={showStk ? "small-button active" : "small-button"} type="button" onClick={() => setShowStk((value) => !value)}>
+          STK prompt
+        </button>
+      </div>
+
+      {showStk && (
+        <div className="stk-panel">
+          <div className="two-col">
+            <label>
+              Mobile number
+              <input value={stkPhone} onChange={(event) => setStkPhone(event.target.value)} placeholder="07..." />
+            </label>
+            <label>
+              Amount
+              <input value={stkAmount} onChange={(event) => setStkAmount(event.target.value)} inputMode="decimal" placeholder="KES" />
+            </label>
+          </div>
+          <label>
+            Reference
+            <input value={stkReference} onChange={(event) => setStkReference(event.target.value)} placeholder="Optional bill/table" />
+          </label>
+          <button className="primary" type="button" onClick={() => void sendStkPrompt()} disabled={stkLoading}>
+            {stkLoading ? "Sending prompt" : "Send STK prompt"}
+          </button>
+          {stkPrompt && (
+            <div className={`result result-${stkPrompt.status === "PAID" ? "verified" : ["FAILED", "CANCELLED", "TIMED_OUT"].includes(stkPrompt.status) ? "error" : "pending"}`}>
+              <strong>{stkPrompt.status.replace(/_/g, " ")}</strong>
+              <span>{stkPrompt.message}</span>
+              {stkPrompt.payment && <span>Select “Verify selected payment” to complete the waiter check.</span>}
+            </div>
+          )}
+        </div>
+      )}
+
       <label>
         Search received payments
         <div className="search-input">

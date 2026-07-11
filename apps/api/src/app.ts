@@ -11,6 +11,7 @@ import { businessRouter } from "./routes/business.routes.js";
 import { logsRouter } from "./routes/logs.routes.js";
 import { mpesaRouter } from "./routes/mpesa.routes.js";
 import { platformRouter } from "./routes/platform.routes.js";
+import { stkRouter } from "./routes/stk.routes.js";
 import { tenantsRouter } from "./routes/tenants.routes.js";
 import { transactionsRouter } from "./routes/transactions.routes.js";
 import { usersRouter } from "./routes/users.routes.js";
@@ -116,6 +117,7 @@ export function createApp() {
 
   app.use("/auth", authRouter);
   app.use(verifyRouter);
+  app.use(stkRouter);
   app.use(transactionsRouter);
   app.use(logsRouter);
   app.use(platformRouter);

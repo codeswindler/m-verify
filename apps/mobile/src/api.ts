@@ -3,6 +3,7 @@ import type {
   PaginatedResponse,
   PaymentSummary,
   SafeUser,
+  StkPromptResponse,
   UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
@@ -103,6 +104,12 @@ export const api = {
     payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }
   ) {
     return request<VerificationResponse>("/verify-payment", { method: "POST", token, body: payload });
+  },
+  initiateStkPrompt(token: string, payload: { phoneNumber: string; amount: number; reference?: string }) {
+    return request<StkPromptResponse>("/stk-prompt", { method: "POST", token, body: payload });
+  },
+  getStkPrompt(token: string, id: number) {
+    return request<StkPromptResponse>(`/stk-prompt/${id}`, { token });
   },
   listUsers(token: string) {
     return request<{ data: MobileStaffUser[] }>("/users", { token });

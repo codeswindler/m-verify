@@ -5,6 +5,7 @@ import type {
   PaymentLookupResponse,
   PaymentSummary,
   SafeUser,
+  StkPromptResponse,
   TenantSummary,
   UserPermissions,
   VerificationResponse
@@ -170,6 +171,12 @@ export const api = {
   },
   verifyPayment(token: string, payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }) {
     return request<VerificationResponse>("/verify-payment", { method: "POST", token, body: payload });
+  },
+  initiateStkPrompt(token: string, payload: { phoneNumber: string; amount: number; reference?: string }) {
+    return request<StkPromptResponse>("/stk-prompt", { method: "POST", token, body: payload });
+  },
+  getStkPrompt(token: string, id: number) {
+    return request<StkPromptResponse>(`/stk-prompt/${id}`, { token });
   },
   platformDashboard(token: string) {
     return request<PlatformDashboard>("/platform/dashboard", { token });

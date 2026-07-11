@@ -114,6 +114,18 @@ export type PaymentLookupResponse = {
   payment?: PaymentSummary;
 };
 
+export const stkPromptStatuses = ["REQUESTED", "PENDING", "PAID", "FAILED", "CANCELLED", "TIMED_OUT"] as const;
+export type StkPromptStatus = (typeof stkPromptStatuses)[number];
+
+export type StkPromptResponse = {
+  id: number;
+  status: StkPromptStatus;
+  message: string;
+  checkoutRequestId?: string | null;
+  payment?: PaymentSummary;
+  failureReason?: string | null;
+};
+
 export type PaginatedResponse<T> = {
   data: T[];
   page: number;
@@ -155,6 +167,12 @@ export const verifyPaymentSchema = z.object({
 export const paymentVerificationSearchSchema = z.object({
   q: z.string().trim().min(1).max(120),
   limit: z.coerce.number().int().positive().max(25).default(10)
+});
+
+export const initiateStkPromptSchema = z.object({
+  phoneNumber: z.string().trim().min(7).max(20),
+  amount: z.coerce.number().positive().max(250_000),
+  reference: z.string().trim().max(120).optional().or(z.literal(""))
 });
 
 export const userPermissionsSchema = z.object({

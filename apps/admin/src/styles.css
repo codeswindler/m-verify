@@ -1399,6 +1399,16 @@ tbody tr:hover td {
   max-width: 1120px;
 }
 
+.stk-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--brand-50);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .verify-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

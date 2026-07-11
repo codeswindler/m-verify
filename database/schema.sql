@@ -104,6 +104,35 @@ CREATE TABLE IF NOT EXISTS device_sessions (
   CONSTRAINT fk_device_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS stk_prompt_requests (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tenant_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NULL,
+  device_session_id BIGINT UNSIGNED NULL,
+  phone_number VARCHAR(20) NOT NULL,
+  amount DECIMAL(12, 2) NOT NULL,
+  reference VARCHAR(120) NULL,
+  merchant_request_id VARCHAR(80) NULL,
+  checkout_request_id VARCHAR(120) NULL,
+  status ENUM('REQUESTED', 'PENDING', 'PAID', 'FAILED', 'CANCELLED', 'TIMED_OUT') NOT NULL DEFAULT 'REQUESTED',
+  result_code VARCHAR(30) NULL,
+  result_description VARCHAR(255) NULL,
+  payment_id BIGINT UNSIGNED NULL,
+  requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL,
+  completed_at DATETIME NULL,
+  raw_request_json JSON NULL,
+  raw_result_json JSON NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_stk_checkout_request (checkout_request_id),
+  KEY idx_stk_tenant_status (tenant_id, status),
+  KEY idx_stk_user_requested (user_id, requested_at),
+  CONSTRAINT fk_stk_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_stk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_stk_session FOREIGN KEY (device_session_id) REFERENCES device_sessions(id) ON DELETE SET NULL,
+  CONSTRAINT fk_stk_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS verification_logs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   tenant_id BIGINT UNSIGNED NULL,

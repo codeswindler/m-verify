@@ -156,6 +156,7 @@ dl {
 .bottom-nav button,
 .quick-actions button,
 .segmented button,
+.secondary-action,
 .payment-option,
 .row-actions button {
   border: 0;
@@ -172,6 +173,25 @@ dl {
   background: linear-gradient(135deg, var(--green), var(--green-2));
   color: #041008;
   font-weight: 900;
+}
+
+.secondary-action {
+  display: inline-flex;
+  width: 100%;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--r);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 900;
+}
+
+.stk-card,
+.stk-form {
+  display: grid;
+  gap: 0.8rem;
 }
 
 .inline-error,

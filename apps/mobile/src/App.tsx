@@ -23,7 +23,7 @@ import {
   WalletCards,
   XCircle
 } from "lucide-react";
-import { defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
+import { defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type StkPromptResponse, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
 import {
   api,
   loadTransactionArchive,
@@ -521,6 +521,12 @@ function VerifyScreen({
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [showStk, setShowStk] = useState(false);
+  const [stkPhone, setStkPhone] = useState("");
+  const [stkAmount, setStkAmount] = useState("");
+  const [stkReference, setStkReference] = useState("");
+  const [stkPrompt, setStkPrompt] = useState<StkPromptResponse | null>(null);
+  const [stkLoading, setStkLoading] = useState(false);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -579,6 +585,49 @@ function VerifyScreen({
     }
   }
 
+  useEffect(() => {
+    if (!stkPrompt || !["REQUESTED", "PENDING"].includes(stkPrompt.status)) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await api.getStkPrompt(token, stkPrompt.id);
+        setStkPrompt(response);
+        if (response.payment) {
+          setSelectedPayment(response.payment);
+          setPayments([response.payment]);
+          setQuery("");
+          setResult(null);
+        }
+      } catch (pollError) {
+        setStkPrompt((current) => current ? { ...current, status: "FAILED", message: pollError instanceof Error ? pollError.message : "Could not check STK prompt" } : current);
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [stkPrompt, token]);
+
+  async function sendStkPrompt() {
+    const amountValue = Number(stkAmount);
+    if (!stkPhone.trim() || !Number.isFinite(amountValue) || amountValue <= 0) {
+      setError("Enter customer phone and amount for STK prompt.");
+      return;
+    }
+    setError("");
+    setResult(null);
+    setStkPrompt(null);
+    setStkLoading(true);
+    try {
+      const response = await api.initiateStkPrompt(token, {
+        phoneNumber: stkPhone.trim(),
+        amount: amountValue,
+        reference: stkReference.trim() || undefined
+      });
+      setStkPrompt(response);
+    } catch (stkError) {
+      setError(stkError instanceof Error ? stkError.message : "STK prompt failed");
+    } finally {
+      setStkLoading(false);
+    }
+  }
+
   return (
     <section className="screen-stack verify-screen">
       <div className="verify-hero">
@@ -588,6 +637,38 @@ function VerifyScreen({
         </div>
         <ShieldCheck size={34} />
       </div>
+
+      <section className="section-card stk-card">
+        <button className="secondary-action" type="button" onClick={() => setShowStk((current) => !current)}>
+          <ShieldCheck size={18} />
+          <span>STK prompt</span>
+        </button>
+        {showStk ? (
+          <div className="stk-form">
+            <label>
+              <span>Mobile number</span>
+              <input value={stkPhone} onChange={(event) => setStkPhone(event.target.value)} placeholder="07..." inputMode="tel" />
+            </label>
+            <label>
+              <span>Amount</span>
+              <input value={stkAmount} onChange={(event) => setStkAmount(event.target.value)} placeholder="KES" inputMode="decimal" />
+            </label>
+            <label>
+              <span>Reference</span>
+              <input value={stkReference} onChange={(event) => setStkReference(event.target.value)} placeholder="Optional bill/table" />
+            </label>
+            <button className="primary-button" type="button" onClick={() => void sendStkPrompt()} disabled={stkLoading}>
+              {stkLoading ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+              {stkLoading ? "Sending prompt" : "Send STK prompt"}
+            </button>
+            {stkPrompt ? (
+              <div className={stkPrompt.status === "PAID" ? "success-note" : ["FAILED", "CANCELLED", "TIMED_OUT"].includes(stkPrompt.status) ? "inline-error" : "empty-state"}>
+                <span>{stkPrompt.status.replace(/_/g, " ")}: {stkPrompt.message}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <label className="search-field">
         <span>Search received payments</span>
