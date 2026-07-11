@@ -56,12 +56,12 @@ export type UpdateTenantPayload = Partial<CreateTenantPayload> & {
 
 export type UpsertMpesaCredentialPayload = {
   environment: "sandbox" | "production";
+  paymentMethod: "paybill" | "till";
   businessShortCode: string;
   tillNumber?: string;
   consumerKey?: string;
   consumerSecret?: string;
   passkey?: string;
-  callbackSecret?: string;
   active: boolean;
 };
 
@@ -170,6 +170,13 @@ export const api = {
   },
   saveMpesaSettings(token: string, tenantId: number, payload: UpsertMpesaCredentialPayload) {
     return request<MpesaCredentialSummary>(`/tenants/${tenantId}/mpesa`, { method: "PUT", token, body: payload });
+  },
+  registerMpesaCallbacks(token: string, tenantId: number) {
+    return request<{
+      message: string;
+      daraja: Record<string, unknown>;
+      callbackUrls: Pick<MpesaCredentialSummary, "validationUrl" | "confirmationUrl">;
+    }>(`/tenants/${tenantId}/mpesa/register-callbacks`, { method: "POST", token });
   }
 };
 

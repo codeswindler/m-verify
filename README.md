@@ -136,7 +136,7 @@ The verifier searches received payments by M-Pesa transaction code, amount, or c
 
 ## Daraja C2B
 
-Platform admins can create businesses in the admin panel and save each business's M-Pesa shortcode, Daraja credentials, callback secret, and active status.
+Platform admins can create businesses in the admin panel and save each business's M-Pesa payment method, shortcode, Daraja credentials, and active status. Choose **Paybill** when the business receives payments through a paybill number. Choose **Till number** when the business receives Buy Goods payments; enter the store/head-office shortcode used by Daraja, and optionally store the customer-facing till number if Safaricom/bank onboarding issued both.
 
 For business-specific callbacks, configure Safaricom Daraja C2B validation and confirmation URLs to the generated business URLs:
 
@@ -148,6 +148,6 @@ The legacy default callbacks still work for single-business setups:
 - `POST /mpesa/c2b/validation`
 - `POST /mpesa/c2b/confirmation`
 
-Set `DARAJA_CALLBACK_SECRET` for the global callback secret or configure a per-business callback secret in the admin panel. Send it as `X-M-Verify-Callback-Secret` from the callback gateway or reverse proxy.
+The admin M-Pesa panel includes a **Register callbacks** shortcut that uses the saved Daraja consumer key and consumer secret to register the generated URLs with Safaricom.
 
 For production, set `PUBLIC_API_BASE_URL` to the public HTTPS API URL so generated tenant callback URLs are correct, and set `CREDENTIAL_ENCRYPTION_KEY` to a long random secret before saving Daraja credentials.

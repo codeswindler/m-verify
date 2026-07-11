@@ -9,6 +9,9 @@ export type TenantStatus = (typeof tenantStatuses)[number];
 export const mpesaEnvironments = ["sandbox", "production"] as const;
 export type MpesaEnvironment = (typeof mpesaEnvironments)[number];
 
+export const mpesaPaymentMethods = ["paybill", "till"] as const;
+export type MpesaPaymentMethod = (typeof mpesaPaymentMethods)[number];
+
 export const paymentStatuses = ["PAID"] as const;
 export type PaymentStatus = (typeof paymentStatuses)[number];
 
@@ -70,12 +73,12 @@ export type TenantSummary = {
 export type MpesaCredentialSummary = {
   tenantId: number;
   environment: MpesaEnvironment;
+  paymentMethod: MpesaPaymentMethod;
   businessShortCode: string;
   tillNumber: string | null;
   consumerKeyMasked: string | null;
   hasConsumerSecret: boolean;
   hasPasskey: boolean;
-  callbackSecretHint: string | null;
   validationUrl: string;
   confirmationUrl: string;
   active: boolean;
@@ -189,12 +192,12 @@ export const updateTenantSchema = z.object({
 
 export const upsertMpesaCredentialSchema = z.object({
   environment: z.enum(mpesaEnvironments).default("production"),
+  paymentMethod: z.enum(mpesaPaymentMethods).default("paybill"),
   businessShortCode: z.string().trim().min(3).max(30),
   tillNumber: z.string().trim().max(30).optional().or(z.literal("")),
   consumerKey: z.string().trim().max(300).optional().or(z.literal("")),
   consumerSecret: z.string().trim().max(300).optional().or(z.literal("")),
   passkey: z.string().trim().max(500).optional().or(z.literal("")),
-  callbackSecret: z.string().trim().min(12).max(200).optional().or(z.literal("")),
   active: z.boolean().default(true)
 });
 

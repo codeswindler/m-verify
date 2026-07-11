@@ -2,11 +2,10 @@ import { Router, type Request, type Response } from "express";
 import { darajaConfirmationSchema } from "@m-verify/shared";
 import type { ResultSetHeader, RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
-import { config } from "../config.js";
 import { AppError, asyncHandler } from "../http.js";
 import { validateBody } from "../middleware/validate.js";
 import { normalizePayerIdentifier, normalizeTransactionCode, parseDarajaTime } from "../utils/format.js";
-import { isAllowedCallbackIp, verifyCallbackSecret } from "../utils/security.js";
+import { isAllowedCallbackIp } from "../utils/security.js";
 
 export const mpesaRouter = Router();
 
@@ -15,7 +14,6 @@ type CallbackTenantRow = RowDataPacket & {
   name: string;
   slug: string;
   status: "active" | "disabled";
-  callback_secret_hash: string | null;
   credentials_active: number | null;
 };
 
@@ -25,7 +23,7 @@ async function findTenantForCallback(
 ): Promise<CallbackTenantRow> {
   if (tenantSlug) {
     const [rows] = await pool.execute<CallbackTenantRow[]>(
-      `SELECT t.id, t.name, t.slug, t.status, mc.callback_secret_hash, mc.active AS credentials_active
+      `SELECT t.id, t.name, t.slug, t.status, mc.active AS credentials_active
        FROM tenants t
        LEFT JOIN tenant_mpesa_credentials mc ON mc.tenant_id = t.id
        WHERE t.slug = ?
@@ -39,7 +37,7 @@ async function findTenantForCallback(
 
   if (payload.BusinessShortCode !== undefined) {
     const [rows] = await pool.execute<CallbackTenantRow[]>(
-      `SELECT t.id, t.name, t.slug, t.status, mc.callback_secret_hash, mc.active AS credentials_active
+      `SELECT t.id, t.name, t.slug, t.status, mc.active AS credentials_active
        FROM tenant_mpesa_credentials mc
        INNER JOIN tenants t ON t.id = mc.tenant_id
        WHERE mc.business_shortcode = ?
@@ -54,7 +52,7 @@ async function findTenantForCallback(
   }
 
   const [rows] = await pool.execute<CallbackTenantRow[]>(
-    `SELECT t.id, t.name, t.slug, t.status, mc.callback_secret_hash, mc.active AS credentials_active
+    `SELECT t.id, t.name, t.slug, t.status, mc.active AS credentials_active
      FROM tenants t
      LEFT JOIN tenant_mpesa_credentials mc ON mc.tenant_id = t.id
      WHERE t.id = 1
@@ -72,18 +70,6 @@ function assertCallbackAllowed(request: Request, tenant: CallbackTenantRow): voi
 
   if (!isAllowedCallbackIp(request.ip ?? "")) {
     throw new AppError(403, "Callback source IP is not allowed", "CALLBACK_IP_FORBIDDEN");
-  }
-
-  const suppliedSecret = request.header("x-m-verify-callback-secret") ?? "";
-  if (tenant.callback_secret_hash) {
-    if (!suppliedSecret || !verifyCallbackSecret(suppliedSecret, tenant.callback_secret_hash)) {
-      throw new AppError(401, "Invalid tenant callback secret", "INVALID_CALLBACK_SECRET");
-    }
-    return;
-  }
-
-  if (config.daraja.callbackSecret && suppliedSecret !== config.daraja.callbackSecret) {
-    throw new AppError(401, "Invalid Daraja callback secret", "INVALID_CALLBACK_SECRET");
   }
 }
 

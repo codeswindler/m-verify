@@ -16,7 +16,6 @@ import { validateBody } from "../middleware/validate.js";
 import {
   decryptCredential,
   encryptCredential,
-  hashCallbackSecret,
   maskSecret
 } from "../utils/security.js";
 
@@ -36,15 +35,29 @@ type MpesaCredentialRow = RowDataPacket & {
   tenant_id: number;
   tenant_slug: string;
   environment: "sandbox" | "production";
+  payment_method: "paybill" | "till";
   business_shortcode: string;
   till_number: string | null;
   consumer_key_encrypted: string | null;
   consumer_secret_encrypted: string | null;
   passkey_encrypted: string | null;
-  callback_secret_hash: string | null;
-  callback_secret_hint: string | null;
   active: number;
   updated_at: Date | string | null;
+};
+
+type DarajaTokenResponse = {
+  access_token?: string;
+  error?: string;
+  errorMessage?: string;
+};
+
+type DarajaRegisterResponse = {
+  ResponseCode?: string;
+  ResponseDescription?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  requestId?: string;
+  [key: string]: unknown;
 };
 
 const idParamsSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -90,22 +103,17 @@ function mapTenant(row: TenantRow): TenantSummary {
   };
 }
 
-function secretHint(value: string): string {
-  if (value.length <= 8) return "configured";
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
-}
-
 function mapMpesaCredential(row: MpesaCredentialRow): MpesaCredentialSummary {
   const consumerKey = decryptCredential(row.consumer_key_encrypted);
   return {
     tenantId: Number(row.tenant_id),
     environment: row.environment,
+    paymentMethod: row.payment_method,
     businessShortCode: row.business_shortcode,
     tillNumber: row.till_number,
     consumerKeyMasked: maskSecret(consumerKey),
     hasConsumerSecret: Boolean(row.consumer_secret_encrypted),
     hasPasskey: Boolean(row.passkey_encrypted),
-    callbackSecretHint: row.callback_secret_hint,
     ...callbackUrls(row.tenant_slug),
     active: Boolean(row.active),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null
@@ -129,9 +137,9 @@ async function getTenant(id: number): Promise<TenantRow> {
 
 async function getMpesaCredential(id: number): Promise<MpesaCredentialRow | null> {
   const [rows] = await pool.execute<MpesaCredentialRow[]>(
-    `SELECT mc.tenant_id, t.slug AS tenant_slug, mc.environment, mc.business_shortcode, mc.till_number,
+    `SELECT mc.tenant_id, t.slug AS tenant_slug, mc.environment, mc.payment_method, mc.business_shortcode, mc.till_number,
       mc.consumer_key_encrypted, mc.consumer_secret_encrypted, mc.passkey_encrypted,
-      mc.callback_secret_hash, mc.callback_secret_hint, mc.active, mc.updated_at
+      mc.active, mc.updated_at
      FROM tenant_mpesa_credentials mc
      INNER JOIN tenants t ON t.id = mc.tenant_id
      WHERE mc.tenant_id = ?
@@ -139,6 +147,87 @@ async function getMpesaCredential(id: number): Promise<MpesaCredentialRow | null
     [id]
   );
   return rows[0] ?? null;
+}
+
+function darajaOAuthUrl(environment: "sandbox" | "production"): string {
+  return environment === "sandbox" ? config.daraja.oauthSandboxUrl : config.daraja.oauthProductionUrl;
+}
+
+function darajaRegisterUrl(environment: "sandbox" | "production"): string {
+  return environment === "sandbox" ? config.daraja.c2bRegisterSandboxUrl : config.daraja.c2bRegisterProductionUrl;
+}
+
+async function readDarajaJson(response: Response): Promise<DarajaRegisterResponse & DarajaTokenResponse> {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as DarajaRegisterResponse & DarajaTokenResponse;
+  } catch {
+    return { errorMessage: text };
+  }
+}
+
+async function requestDarajaAccessToken(credentials: MpesaCredentialRow): Promise<string> {
+  const consumerKey = decryptCredential(credentials.consumer_key_encrypted);
+  const consumerSecret = decryptCredential(credentials.consumer_secret_encrypted);
+
+  if (!consumerKey || !consumerSecret) {
+    throw new AppError(400, "Save the Daraja consumer key and consumer secret before registering callbacks.", "DARAJA_CREDENTIALS_REQUIRED");
+  }
+
+  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`, "utf8").toString("base64");
+  const response = await fetch(darajaOAuthUrl(credentials.environment), {
+    method: "GET",
+    headers: {
+      authorization: `Basic ${auth}`
+    }
+  });
+  const payload = await readDarajaJson(response);
+
+  if (!response.ok || !payload.access_token) {
+    throw new AppError(
+      502,
+      payload.errorMessage ?? payload.error ?? "Daraja token request failed.",
+      "DARAJA_TOKEN_FAILED",
+      payload
+    );
+  }
+
+  return payload.access_token;
+}
+
+async function registerDarajaCallbacks(credentials: MpesaCredentialRow): Promise<DarajaRegisterResponse> {
+  if (!credentials.active) {
+    throw new AppError(400, "Enable callbacks before registering URLs with Daraja.", "MPESA_CALLBACKS_DISABLED");
+  }
+
+  const token = await requestDarajaAccessToken(credentials);
+  const urls = callbackUrls(credentials.tenant_slug);
+  const response = await fetch(darajaRegisterUrl(credentials.environment), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      ShortCode: credentials.business_shortcode,
+      ResponseType: "Completed",
+      ConfirmationURL: urls.confirmationUrl,
+      ValidationURL: urls.validationUrl
+    })
+  });
+  const payload = await readDarajaJson(response);
+
+  if (!response.ok) {
+    throw new AppError(
+      502,
+      payload.errorMessage ?? payload.ResponseDescription ?? "Daraja callback registration failed.",
+      "DARAJA_REGISTER_FAILED",
+      payload
+    );
+  }
+
+  return payload;
 }
 
 tenantsRouter.get(
@@ -267,43 +356,32 @@ tenantsRouter.put(
     const body = request.body as typeof upsertMpesaCredentialSchema._type;
     const existing = await getMpesaCredential(id);
 
-    const callbackSecret = normalizeEmpty(body.callbackSecret);
-    const callbackSecretHash = callbackSecret
-      ? hashCallbackSecret(callbackSecret)
-      : existing?.callback_secret_hash ?? null;
-    const callbackSecretHint = callbackSecret
-      ? secretHint(callbackSecret)
-      : existing?.callback_secret_hint ?? null;
-
     try {
       await pool.execute<ResultSetHeader>(
         `INSERT INTO tenant_mpesa_credentials (
-          tenant_id, environment, business_shortcode, till_number, consumer_key_encrypted,
-          consumer_secret_encrypted, passkey_encrypted, callback_secret_hash,
-          callback_secret_hint, active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          tenant_id, environment, payment_method, business_shortcode, till_number, consumer_key_encrypted,
+          consumer_secret_encrypted, passkey_encrypted, active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           environment = VALUES(environment),
+          payment_method = VALUES(payment_method),
           business_shortcode = VALUES(business_shortcode),
           till_number = VALUES(till_number),
           consumer_key_encrypted = VALUES(consumer_key_encrypted),
           consumer_secret_encrypted = VALUES(consumer_secret_encrypted),
           passkey_encrypted = VALUES(passkey_encrypted),
-          callback_secret_hash = VALUES(callback_secret_hash),
-          callback_secret_hint = VALUES(callback_secret_hint),
           active = VALUES(active)`,
         [
           id,
           body.environment,
+          body.paymentMethod,
           body.businessShortCode,
-          normalizeEmpty(body.tillNumber),
+          body.paymentMethod === "till" ? normalizeEmpty(body.tillNumber) : null,
           normalizeEmpty(body.consumerKey) ? encryptCredential(body.consumerKey) : existing?.consumer_key_encrypted ?? null,
           normalizeEmpty(body.consumerSecret)
             ? encryptCredential(body.consumerSecret)
             : existing?.consumer_secret_encrypted ?? null,
           normalizeEmpty(body.passkey) ? encryptCredential(body.passkey) : existing?.passkey_encrypted ?? null,
-          callbackSecretHash,
-          callbackSecretHint,
           body.active
         ]
       );
@@ -316,5 +394,24 @@ tenantsRouter.put(
 
     const credentials = await getMpesaCredential(id);
     response.json(mapMpesaCredential(credentials!));
+  })
+);
+
+tenantsRouter.post(
+  "/tenants/:id/mpesa/register-callbacks",
+  asyncHandler(async (request, response) => {
+    const { id } = idParamsSchema.parse(request.params);
+    await getTenant(id);
+    const credentials = await getMpesaCredential(id);
+    if (!credentials) {
+      throw new AppError(404, "Save M-Pesa credentials before registering callbacks.", "MPESA_CREDENTIALS_NOT_FOUND");
+    }
+
+    const darajaResponse = await registerDarajaCallbacks(credentials);
+    response.json({
+      message: darajaResponse.ResponseDescription ?? "Daraja callback URLs registered.",
+      daraja: darajaResponse,
+      callbackUrls: callbackUrls(credentials.tenant_slug)
+    });
   })
 );

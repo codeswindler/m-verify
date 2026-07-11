@@ -51,17 +51,6 @@ export function maskSecret(value: string | null | undefined): string | null {
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
-export function hashCallbackSecret(secret: string): string {
-  return crypto.createHash("sha256").update(secret).digest("hex");
-}
-
-export function verifyCallbackSecret(secret: string, expectedHash: string): boolean {
-  const actual = Buffer.from(hashCallbackSecret(secret), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  if (actual.length !== expected.length) return false;
-  return crypto.timingSafeEqual(actual, expected);
-}
-
 export function refreshExpiryDate(): Date {
   const date = new Date();
   date.setDate(date.getDate() + config.security.refreshTokenDays);

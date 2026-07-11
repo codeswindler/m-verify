@@ -313,12 +313,12 @@ function PlatformDashboardView({ token }: { token: string }) {
 function emptyMpesaForm(): UpsertMpesaCredentialPayload {
   return {
     environment: "production",
+    paymentMethod: "paybill",
     businessShortCode: "",
     tillNumber: "",
     consumerKey: "",
     consumerSecret: "",
     passkey: "",
-    callbackSecret: "",
     active: true
   };
 }
@@ -397,12 +397,12 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     setCallbackUrls(result.callbackUrls);
     setMpesaForm({
       environment: result.data?.environment ?? "production",
+      paymentMethod: result.data?.paymentMethod ?? "paybill",
       businessShortCode: result.data?.businessShortCode ?? "",
       tillNumber: result.data?.tillNumber ?? "",
       consumerKey: "",
       consumerSecret: "",
       passkey: "",
-      callbackSecret: "",
       active: result.data?.active ?? true
     });
   }
@@ -493,13 +493,40 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
       const saved = await api.saveMpesaSettings(token, selectedBusinessId, mpesaForm);
       setMpesaSettings(saved);
       setCallbackUrls({ validationUrl: saved.validationUrl, confirmationUrl: saved.confirmationUrl });
-      setMpesaForm((current) => ({ ...current, consumerKey: "", consumerSecret: "", passkey: "", callbackSecret: "" }));
+      setMpesaForm((current) => ({ ...current, consumerKey: "", consumerSecret: "", passkey: "" }));
       setMessage("M-Pesa settings saved.");
       notify("M-Pesa settings saved", "Callback URLs and credentials are ready.");
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Could not save M-Pesa settings";
       setError(messageText);
       notify("M-Pesa settings failed", messageText, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateMpesaPaymentMethod(paymentMethod: UpsertMpesaCredentialPayload["paymentMethod"]) {
+    setMpesaForm((current) => ({
+      ...current,
+      paymentMethod,
+      tillNumber: paymentMethod === "till" ? current.tillNumber : ""
+    }));
+  }
+
+  async function registerMpesaCallbacks() {
+    if (!selectedBusinessId) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api.registerMpesaCallbacks(token, selectedBusinessId);
+      setCallbackUrls(result.callbackUrls);
+      setMessage(result.message);
+      notify("Callbacks registered", result.message);
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : "Could not register Daraja callbacks";
+      setError(messageText);
+      notify("Callback registration failed", messageText, "error");
     } finally {
       setLoading(false);
     }
@@ -685,17 +712,23 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                   <label>Confirmation callback
                     <div className="copy-field"><input readOnly value={callbackUrls.confirmationUrl} /><button type="button" onClick={() => void copyUrl(callbackUrls.confirmationUrl)} disabled={!callbackUrls.confirmationUrl} title="Copy confirmation callback URL"><Copy size={14} /> Copy</button></div>
                   </label>
+                  <div className="callback-actions">
+                    <button type="button" onClick={() => void registerMpesaCallbacks()} disabled={loading || !mpesaSettings?.consumerKeyMasked || !mpesaSettings?.hasConsumerSecret} title="Register these URLs with Safaricom Daraja"><KeyRound size={14} /> Register callbacks</button>
+                    <span>Save Daraja credentials first. Safaricom will send callbacks directly to these URLs.</span>
+                  </div>
                 </div>
                 <form className="mpesa-form" onSubmit={saveMpesa}>
                   <h3><KeyRound size={16} /> M-Pesa credentials</h3>
                   <div className="form-grid two">
                     <label>Environment<select value={mpesaForm.environment} onChange={(event) => setMpesaForm({ ...mpesaForm, environment: event.target.value as UpsertMpesaCredentialPayload["environment"] })}><option value="production">Production</option><option value="sandbox">Sandbox</option></select></label>
-                    <label>Business shortcode<input value={mpesaForm.businessShortCode} onChange={(event) => setMpesaForm({ ...mpesaForm, businessShortCode: event.target.value })} /></label>
-                    <label>Till / paybill<input value={mpesaForm.tillNumber ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, tillNumber: event.target.value })} /></label>
+                    <label>Payment method<select value={mpesaForm.paymentMethod} onChange={(event) => updateMpesaPaymentMethod(event.target.value as UpsertMpesaCredentialPayload["paymentMethod"])}><option value="paybill">Paybill</option><option value="till">Till number</option></select></label>
+                    <label>{mpesaForm.paymentMethod === "paybill" ? "Paybill number" : "Store number / shortcode"}<input value={mpesaForm.businessShortCode} onChange={(event) => setMpesaForm({ ...mpesaForm, businessShortCode: event.target.value })} placeholder={mpesaForm.paymentMethod === "paybill" ? "Example: 4049311" : "Store or head-office shortcode"} /><span className="field-note">{mpesaForm.paymentMethod === "paybill" ? "The Paybill used to receive C2B payment notifications." : "Use the store or shortcode Daraja expects for callback registration."}</span></label>
+                    {mpesaForm.paymentMethod === "till" && (
+                      <label>Till number<input value={mpesaForm.tillNumber ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, tillNumber: event.target.value })} placeholder="Optional customer-facing till number" /><span className="field-note">If you only have one Till identifier, put it in Store number / shortcode and leave this blank.</span></label>
+                    )}
                     <label>Consumer key<input value={mpesaForm.consumerKey ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, consumerKey: event.target.value })} placeholder={mpesaSettings?.consumerKeyMasked ?? ""} /></label>
                     <label>Consumer secret<input type="password" value={mpesaForm.consumerSecret ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, consumerSecret: event.target.value })} placeholder={mpesaSettings?.hasConsumerSecret ? "Configured" : ""} /></label>
                     <label>Passkey<input type="password" value={mpesaForm.passkey ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, passkey: event.target.value })} placeholder={mpesaSettings?.hasPasskey ? "Configured" : ""} /></label>
-                    <label>Callback secret<input type="password" value={mpesaForm.callbackSecret ?? ""} onChange={(event) => setMpesaForm({ ...mpesaForm, callbackSecret: event.target.value })} placeholder={mpesaSettings?.callbackSecretHint ?? ""} /></label>
                     <label className="check-row"><input type="checkbox" checked={mpesaForm.active} onChange={(event) => setMpesaForm({ ...mpesaForm, active: event.target.checked })} /><span>Callbacks active</span></label>
                   </div>
                   <button className="primary" disabled={loading}><Save size={14} /> Save M-Pesa settings</button>

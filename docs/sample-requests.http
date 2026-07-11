@@ -1,7 +1,6 @@
 @baseUrl = http://localhost:4000
 @accessToken = replace-with-access-token
 @refreshToken = replace-with-refresh-token
-@darajaSecret = change-me-callback-secret
 @tenantId = 1
 @tenantSlug = default-business
 
@@ -132,18 +131,21 @@ Content-Type: application/json
 
 {
   "environment": "production",
+  "paymentMethod": "paybill",
   "businessShortCode": "600000",
-  "tillNumber": "600000",
+  "tillNumber": "",
   "consumerKey": "daraja-consumer-key",
   "consumerSecret": "daraja-consumer-secret",
   "passkey": "daraja-passkey",
-  "callbackSecret": "tenant-callback-secret-123",
   "active": true
 }
 
+### Register saved business callbacks with Safaricom Daraja
+POST {{baseUrl}}/tenants/{{tenantId}}/mpesa/register-callbacks
+Authorization: Bearer {{accessToken}}
+
 ### Daraja validation callback
 POST {{baseUrl}}/mpesa/c2b/validation
-X-M-Verify-Callback-Secret: {{darajaSecret}}
 Content-Type: application/json
 
 {
@@ -156,7 +158,6 @@ Content-Type: application/json
 
 ### Tenant Daraja validation callback
 POST {{baseUrl}}/mpesa/{{tenantSlug}}/c2b/validation
-X-M-Verify-Callback-Secret: {{darajaSecret}}
 Content-Type: application/json
 
 {
@@ -170,7 +171,6 @@ Content-Type: application/json
 
 ### Daraja confirmation callback
 POST {{baseUrl}}/mpesa/c2b/confirmation
-X-M-Verify-Callback-Secret: {{darajaSecret}}
 Content-Type: application/json
 
 {
@@ -184,7 +184,6 @@ Content-Type: application/json
 
 ### Tenant Daraja confirmation callback
 POST {{baseUrl}}/mpesa/{{tenantSlug}}/c2b/confirmation
-X-M-Verify-Callback-Secret: {{darajaSecret}}
 Content-Type: application/json
 
 {

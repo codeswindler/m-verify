@@ -47,7 +47,6 @@ Set real values for:
 - `MYSQL_ROOT_PASSWORD`
 - `JWT_SECRET`
 - `CREDENTIAL_ENCRYPTION_KEY`
-- `DARAJA_CALLBACK_SECRET`
 - `SEED_ADMIN_PASSWORD`
 
 Generate secrets with:
@@ -91,20 +90,14 @@ In the admin panel:
 
 1. Create a business.
 2. Set its commission.
-3. Save its M-Pesa shortcode and Daraja credentials.
-4. Copy the generated C2B callback URLs.
+3. Choose Paybill or Till number and save its M-Pesa shortcode plus Daraja credentials.
+4. Click **Register callbacks** to send the generated URLs to Daraja, or copy the URLs manually.
 
 Use these Safaricom Daraja callback URLs:
 
 ```text
 https://api.your-domain.com/mpesa/<business-slug>/c2b/validation
 https://api.your-domain.com/mpesa/<business-slug>/c2b/confirmation
-```
-
-If the callback gateway can add headers, send:
-
-```text
-X-M-Verify-Callback-Secret: <business-or-global-callback-secret>
 ```
 
 ## 6. Build The Live Windows App

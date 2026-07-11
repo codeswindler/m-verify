@@ -947,6 +947,21 @@ tbody tr:hover td {
   font-size: 12px;
 }
 
+.callback-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.callback-actions span,
+.field-note {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .mpesa-form {
   display: grid;
   gap: 14px;

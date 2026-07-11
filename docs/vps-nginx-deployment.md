@@ -225,12 +225,15 @@ https://m-verify.theleasemaster.com/api/mpesa/<business-slug>/c2b/validation
 https://m-verify.theleasemaster.com/api/mpesa/<business-slug>/c2b/confirmation
 ```
 
+In the admin M-Pesa tab, choose Paybill or Till number, save the Daraja consumer key/secret, then use **Register callbacks** to register those URLs with Safaricom.
+
 ## 9. Update Deployment
 
 ```bash
 cd /var/www/m-verify
 git pull
 docker compose --env-file .env.production -f docker-compose.nginx.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.nginx.yml exec api node apps/api/dist/scripts/migrate.js
 ```
 
 ## 10. Rollback/Stop

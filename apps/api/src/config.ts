@@ -53,8 +53,19 @@ export const config = {
     credentialEncryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? jwtSecret
   },
   daraja: {
-    callbackSecret: process.env.DARAJA_CALLBACK_SECRET ?? "",
-    ipAllowlist: splitCsv(process.env.DARAJA_IP_ALLOWLIST)
+    ipAllowlist: splitCsv(process.env.DARAJA_IP_ALLOWLIST),
+    oauthSandboxUrl:
+      process.env.DARAJA_OAUTH_SANDBOX_URL ??
+      "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    oauthProductionUrl:
+      process.env.DARAJA_OAUTH_PRODUCTION_URL ??
+      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    c2bRegisterSandboxUrl:
+      process.env.DARAJA_C2B_REGISTER_SANDBOX_URL ??
+      "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl",
+    c2bRegisterProductionUrl:
+      process.env.DARAJA_C2B_REGISTER_PRODUCTION_URL ??
+      "https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl"
   },
   rateLimit: {
     windowMs: toNumber("RATE_LIMIT_WINDOW_MS", 60_000),
