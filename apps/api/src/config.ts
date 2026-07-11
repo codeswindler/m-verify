@@ -65,6 +65,9 @@ export const config = {
   desktop: {
     latestVersion: process.env.DESKTOP_LATEST_VERSION ?? "0.1.0",
     downloadUrl: process.env.DESKTOP_DOWNLOAD_URL ?? "",
+    updaterUrl: process.env.DESKTOP_UPDATER_URL ?? "",
+    updaterSignature: process.env.DESKTOP_UPDATER_SIGNATURE ?? "",
+    updaterPubDate: process.env.DESKTOP_UPDATER_PUB_DATE ?? "",
     releaseNotes: process.env.DESKTOP_RELEASE_NOTES ?? "Download the latest M-Verify desktop installer.",
     mandatoryUpdate: toBoolean("DESKTOP_MANDATORY_UPDATE", false)
   },

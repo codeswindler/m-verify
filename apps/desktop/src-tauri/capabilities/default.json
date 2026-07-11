@@ -12,6 +12,8 @@
     "core:window:allow-start-dragging",
     "core:window:allow-unminimize",
     "autostart:default",
+    "process:default",
+    "updater:default",
     "window-state:default"
   ]
 }

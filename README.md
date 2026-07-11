@@ -26,6 +26,7 @@ Tauri references:
 - [Autostart](https://v2.tauri.app/plugin/autostart/)
 - [Single instance](https://v2.tauri.app/plugin/single-instance/)
 - [Window state](https://v2.tauri.app/plugin/window-state/)
+- [Updater](https://v2.tauri.app/plugin/updater/)
 
 ## Local Setup
 
@@ -105,18 +106,27 @@ Install the Tauri Windows prerequisites first, then run:
 
 ```powershell
 pnpm install
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH="$env:USERPROFILE\.tauri\m-verify.key"
 pnpm --filter @m-verify/desktop tauri:build
 ```
 
-The NSIS `.exe` installer is produced under:
+Generate the updater signing key once with:
+
+```powershell
+pnpm --dir apps/desktop exec tauri signer generate --ci -w "$env:USERPROFILE\.tauri\m-verify.key"
+```
+
+Keep the private key backed up securely. The NSIS `.exe` installer and its `.sig` updater signature are produced under:
 
 ```text
 apps/desktop/src-tauri/target/release/bundle/nsis/
 ```
 
+Apps before `0.1.4` need one manual installer update because they do not contain the updater plugin. After that bootstrap release, signed updates can be installed in-app.
+
 ## Verification Rules
 
-The desktop app submits at least one identifier: phone number, M-Pesa transaction code, or reference. Amount is optional; when supplied, the API treats it as an expected amount and returns `AMOUNT_MISMATCH` if the received payment amount differs. Daraja confirmations create received payments only, so there is no pending payment state in the verifier. The API normalizes Kenyan phone numbers and transaction codes, supports hashed/non-standard paybill payer identifiers from callbacks, locks the matching payment row, logs every attempt, and returns one of:
+The verifier searches received payments by M-Pesa transaction code, amount, or customer name. Staff must select a received payment before the app can formally verify it. Daraja confirmations create received payments only, so there is no pending payment state in the verifier. The API locks the selected payment row, logs every attempt, and returns one of:
 
 - `VERIFIED`
 - `NOT_FOUND`

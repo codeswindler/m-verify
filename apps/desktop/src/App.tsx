@@ -22,18 +22,21 @@ import {
   api,
   API_BASE_URL,
   type BusinessDashboard,
-  type DesktopUpdateInfo,
   type DesktopUser
 } from "./api";
 import {
+  checkNativeUpdate,
   enableAutostartOnce,
   getCurrentAppVersion,
   hideWindow,
+  installNativeUpdate,
   openExternalUrl,
   restoreWindowState,
   saveCurrentWindowState,
   setAlwaysOnTop,
-  startWindowDrag
+  startWindowDrag,
+  type NativeUpdateInfo,
+  type UpdateInstallProgress
 } from "./tauri";
 
 const authKey = "mverify_desktop_auth";
@@ -42,7 +45,10 @@ const portalUrl = API_BASE_URL.replace(/\/api\/?$/, "");
 
 type UpdatePromptState = {
   currentVersion: string;
-  latest: DesktopUpdateInfo;
+  latestVersion: string;
+  notes?: string;
+  manualDownloadUrl?: string;
+  native?: NativeUpdateInfo;
 };
 
 type DesktopTab = "dashboard" | "verify" | "payments" | "staff";
@@ -89,16 +95,52 @@ function handleTitlebarPointerDown(event: React.PointerEvent<HTMLDivElement>): v
   void startWindowDrag();
 }
 
+function formatUpdateProgress(progress: UpdateInstallProgress | null): string {
+  if (!progress) return "";
+  if (progress.status === "finished") return "Installing update";
+  if (progress.total && progress.downloaded !== undefined) {
+    const percent = Math.min(100, Math.round((progress.downloaded / progress.total) * 100));
+    return `Downloading ${percent}%`;
+  }
+  return progress.status === "started" ? "Starting download" : "Downloading update";
+}
+
 function UpdateBanner({ update }: { update: UpdatePromptState | null }) {
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState("");
+  const [progress, setProgress] = useState<UpdateInstallProgress | null>(null);
+
   if (!update) return null;
+
+  async function installUpdate() {
+    setInstallError("");
+    if (!update) return;
+    if (!update.native) {
+      if (update.manualDownloadUrl) await openExternalUrl(update.manualDownloadUrl);
+      return;
+    }
+
+    setInstalling(true);
+    try {
+      await installNativeUpdate(update.native, setProgress);
+    } catch (err) {
+      setInstalling(false);
+      setInstallError(err instanceof Error ? err.message : "Update installation failed");
+    }
+  }
+
   return (
     <div className="update-banner">
       <div>
         <strong>Update available</strong>
-        <span>Version {update.latest.latestVersion} is ready. You have {update.currentVersion}.</span>
+        <span>
+          Version {update.latestVersion} is ready. You have {update.currentVersion}.
+          {installing ? ` ${formatUpdateProgress(progress)}...` : ""}
+        </span>
+        {installError && <em>{installError}</em>}
       </div>
-      <button type="button" onClick={() => void openExternalUrl(update.latest.downloadUrl)}>
-        Download
+      <button type="button" onClick={() => void installUpdate()} disabled={installing}>
+        {installing ? "Updating" : update.native ? "Install" : "Download"}
       </button>
     </div>
   );
@@ -695,17 +737,35 @@ export function App() {
     let cancelled = false;
     async function checkForUpdate() {
       try {
+        const nativeUpdate = await checkNativeUpdate();
+        if (!cancelled && nativeUpdate) {
+          setUpdate({
+            currentVersion: nativeUpdate.currentVersion,
+            latestVersion: nativeUpdate.version,
+            notes: nativeUpdate.notes,
+            native: nativeUpdate
+          });
+          return;
+        }
+
         const [currentVersion, latest] = await Promise.all([getCurrentAppVersion(), api.latestDesktopUpdate()]);
         if (!cancelled && compareVersions(latest.latestVersion, currentVersion) > 0) {
-          setUpdate({ currentVersion, latest });
+          setUpdate({
+            currentVersion,
+            latestVersion: latest.latestVersion,
+            notes: latest.releaseNotes,
+            manualDownloadUrl: latest.downloadUrl
+          });
         }
       } catch {
         // Update checks should never block payment verification.
       }
     }
     void checkForUpdate();
+    const timer = window.setInterval(checkForUpdate, 30 * 60 * 1000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 

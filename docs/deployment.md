@@ -113,17 +113,24 @@ On a Windows build machine:
 
 ```powershell
 $env:VITE_API_BASE_URL="https://api.your-domain.com"
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH="$env:USERPROFILE\.tauri\m-verify.key"
 pnpm install
 pnpm --filter @m-verify/desktop tauri:build
 ```
 
-The installer is created at:
+Generate and securely back up the updater signing key once:
+
+```powershell
+pnpm --dir apps/desktop exec tauri signer generate --ci -w "$env:USERPROFILE\.tauri\m-verify.key"
+```
+
+The installer and updater signature are created at:
 
 ```text
 apps/desktop/src-tauri/target/release/bundle/nsis/
 ```
 
-Install that `.exe` on cashier or waiter machines. The app registers Windows startup after launch and uses the hosted API.
+Install that `.exe` on cashier or waiter machines. The app registers Windows startup after launch and uses the hosted API. Upload the versioned `.exe` used by `DESKTOP_UPDATER_URL` and put the contents of its `.sig` file in `DESKTOP_UPDATER_SIGNATURE` to enable in-app updates.
 
 ## 7. Update A Live Deployment
 

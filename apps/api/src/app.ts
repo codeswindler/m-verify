@@ -18,6 +18,17 @@ import { verifyRouter } from "./routes/verify.routes.js";
 
 const tauriDesktopOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
 
+function compareVersions(left: string, right: string): number {
+  const leftParts = left.split(".").map((part) => Number(part.replace(/\D+.*/, "")) || 0);
+  const rightParts = right.split(".").map((part) => Number(part.replace(/\D+.*/, "")) || 0);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 export function createApp() {
   const app = express();
 
@@ -69,6 +80,29 @@ export function createApp() {
       downloadUrl: config.desktop.downloadUrl || `${baseUrl}/downloads/M-Verify-Setup.exe`,
       releaseNotes: config.desktop.releaseNotes,
       mandatory: config.desktop.mandatoryUpdate
+    });
+  });
+
+  app.get("/desktop/update/:target/:arch/:currentVersion", (request, response) => {
+    const { target, arch, currentVersion } = request.params;
+    if (target !== "windows" || arch !== "x86_64") {
+      response.status(204).end();
+      return;
+    }
+
+    if (compareVersions(config.desktop.latestVersion, currentVersion) <= 0 || !config.desktop.updaterSignature) {
+      response.status(204).end();
+      return;
+    }
+
+    const baseUrl = config.publicApiBaseUrl.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+    const url = config.desktop.updaterUrl || `${baseUrl}/downloads/M-Verify_${config.desktop.latestVersion}_x64-setup.exe`;
+    response.json({
+      version: config.desktop.latestVersion,
+      pub_date: config.desktop.updaterPubDate || new Date().toISOString(),
+      url,
+      signature: config.desktop.updaterSignature,
+      notes: config.desktop.releaseNotes
     });
   });
 
