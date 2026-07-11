@@ -96,8 +96,8 @@ In the admin panel:
 Use these Safaricom Daraja callback URLs:
 
 ```text
-https://api.your-domain.com/mpesa/<business-slug>/c2b/validation
-https://api.your-domain.com/mpesa/<business-slug>/c2b/confirmation
+https://api.your-domain.com/callbacks/<business-slug>/c2b/validation
+https://api.your-domain.com/callbacks/<business-slug>/c2b/confirmation
 ```
 
 ## 6. Build The Live Windows App

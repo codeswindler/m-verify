@@ -122,6 +122,7 @@ export function createApp() {
   app.use(businessRouter);
   app.use(tenantsRouter);
   app.use(usersRouter);
+  app.use("/callbacks", mpesaRouter);
   app.use("/mpesa", mpesaRouter);
   app.use(notFoundHandler);
   app.use(errorHandler);

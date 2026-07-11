@@ -221,8 +221,8 @@ https://m-verify.theleasemaster.com
 Business callback URLs will use the `/api` path:
 
 ```text
-https://m-verify.theleasemaster.com/api/mpesa/<business-slug>/c2b/validation
-https://m-verify.theleasemaster.com/api/mpesa/<business-slug>/c2b/confirmation
+https://m-verify.theleasemaster.com/api/callbacks/<business-slug>/c2b/validation
+https://m-verify.theleasemaster.com/api/callbacks/<business-slug>/c2b/confirmation
 ```
 
 In the admin M-Pesa tab, choose Paybill or Till number, save the Daraja consumer key/secret, then use **Register callbacks** to register those URLs with Safaricom.

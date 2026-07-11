@@ -84,8 +84,8 @@ function normalizeEmpty(value: string | undefined): string | null {
 function callbackUrls(slug: string): Pick<MpesaCredentialSummary, "validationUrl" | "confirmationUrl"> {
   const baseUrl = config.publicApiBaseUrl.replace(/\/+$/, "");
   return {
-    validationUrl: `${baseUrl}/mpesa/${slug}/c2b/validation`,
-    confirmationUrl: `${baseUrl}/mpesa/${slug}/c2b/confirmation`
+    validationUrl: `${baseUrl}/callbacks/${slug}/c2b/validation`,
+    confirmationUrl: `${baseUrl}/callbacks/${slug}/c2b/confirmation`
   };
 }
 

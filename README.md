@@ -151,13 +151,13 @@ Platform admins can create businesses in the admin panel and save each business'
 
 For business-specific callbacks, configure Safaricom Daraja C2B validation and confirmation URLs to the generated business URLs:
 
-- `POST /mpesa/{tenantSlug}/c2b/validation`
-- `POST /mpesa/{tenantSlug}/c2b/confirmation`
+- `POST /callbacks/{tenantSlug}/c2b/validation`
+- `POST /callbacks/{tenantSlug}/c2b/confirmation`
 
 The legacy default callbacks still work for single-business setups:
 
-- `POST /mpesa/c2b/validation`
-- `POST /mpesa/c2b/confirmation`
+- `POST /callbacks/c2b/validation`
+- `POST /callbacks/c2b/confirmation`
 
 The admin M-Pesa panel includes a **Register callbacks** shortcut that uses the saved Daraja consumer key and consumer secret to register the generated URLs with Safaricom.
 

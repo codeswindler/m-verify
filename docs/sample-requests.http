@@ -145,7 +145,7 @@ POST {{baseUrl}}/tenants/{{tenantId}}/mpesa/register-callbacks
 Authorization: Bearer {{accessToken}}
 
 ### Daraja validation callback
-POST {{baseUrl}}/mpesa/c2b/validation
+POST {{baseUrl}}/callbacks/c2b/validation
 Content-Type: application/json
 
 {
@@ -157,7 +157,7 @@ Content-Type: application/json
 }
 
 ### Tenant Daraja validation callback
-POST {{baseUrl}}/mpesa/{{tenantSlug}}/c2b/validation
+POST {{baseUrl}}/callbacks/{{tenantSlug}}/c2b/validation
 Content-Type: application/json
 
 {
@@ -170,7 +170,7 @@ Content-Type: application/json
 }
 
 ### Daraja confirmation callback
-POST {{baseUrl}}/mpesa/c2b/confirmation
+POST {{baseUrl}}/callbacks/c2b/confirmation
 Content-Type: application/json
 
 {
@@ -183,7 +183,7 @@ Content-Type: application/json
 }
 
 ### Tenant Daraja confirmation callback
-POST {{baseUrl}}/mpesa/{{tenantSlug}}/c2b/confirmation
+POST {{baseUrl}}/callbacks/{{tenantSlug}}/c2b/confirmation
 Content-Type: application/json
 
 {
