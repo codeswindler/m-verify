@@ -478,6 +478,15 @@ nav.topnav button.active {
   letter-spacing: -0.3px;
 }
 
+.dashboard-heading {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard-heading .subtext {
+  margin-top: 4px;
+}
+
 .section-badge {
   display: inline-flex;
   align-items: center;
@@ -1342,6 +1351,10 @@ tbody tr:hover td {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
+}
+
+.dashboard-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .kpi-card {

@@ -347,24 +347,22 @@ function BusinessDashboardView({ token }: { token: string }) {
 
   return (
     <>
-      <div className="section-header">
+      <div className="section-header dashboard-heading">
         <div>
           <h2>Business Dashboard</h2>
-          <p className="subtext">Net settlement after {formatAmount(dashboard?.kpis.commissionRatePct ?? 0)}% commission. Individual payments still show customer-paid amounts.</p>
+          <p className="subtext">Business activity overview</p>
         </div>
         <button onClick={load} disabled={loading}><RefreshCw size={14} /> Refresh</button>
       </div>
       {error && <div className="error">{error}</div>}
-      <div className="kpi-grid">
-        <KpiCard label="Payments" value={String(dashboard?.kpis.paidTransactions ?? 0)} icon={<ReceiptText size={18} />} />
-        <KpiCard label="Net Settlement" value={`KES ${formatAmount(dashboard?.kpis.totalPaymentVolume ?? 0)}`} icon={<WalletCards size={18} />} />
-        <KpiCard label="Today Net" value={`KES ${formatAmount(dashboard?.kpis.todayPaymentVolume ?? 0)}`} icon={<CheckCircle2 size={18} />} />
+      <div className="kpi-grid dashboard-kpis">
+        <KpiCard label="Today" value={`KES ${formatAmount(dashboard?.kpis.todayPaymentVolume ?? 0)}`} icon={<CheckCircle2 size={18} />} />
+        <KpiCard label="This Month" value={`KES ${formatAmount(dashboard?.kpis.monthPaymentVolume ?? 0)}`} icon={<WalletCards size={18} />} />
         <KpiCard label="Staff" value={String(dashboard?.kpis.staffUsers ?? 0)} icon={<UsersIcon size={18} />} />
       </div>
       <section className="panel">
         <div className="section-header compact">
           <h2>Recent Payments</h2>
-          <span className="section-badge">gross customer amounts</span>
         </div>
         <div className="table-wrap">
           <table>
