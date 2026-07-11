@@ -170,7 +170,7 @@ async function readDarajaJson(response: Response): Promise<DarajaRegisterRespons
 function darajaErrorMessage(payload: DarajaRegisterResponse & DarajaTokenResponse, fallback: string): string {
   const rawMessage = payload.errorMessage ?? payload.ResponseDescription ?? payload.error ?? fallback;
   if (rawMessage.toLowerCase().includes("invalid access token")) {
-    return "Daraja rejected the access token. Confirm this business has the correct sandbox/production environment, consumer key, consumer secret, shortcode, and C2B product access.";
+    return "Daraja rejected the access token during callback registration. If the key and secret are correct, confirm the app is approved for C2B/Register URL in this environment and that the shortcode belongs to that Daraja app.";
   }
   return rawMessage;
 }
@@ -187,7 +187,8 @@ async function requestDarajaAccessToken(credentials: MpesaCredentialRow): Promis
   const response = await fetch(darajaOAuthUrl(credentials.environment), {
     method: "GET",
     headers: {
-      authorization: `Basic ${auth}`
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json"
     }
   });
   const payload = await readDarajaJson(response);
@@ -197,11 +198,17 @@ async function requestDarajaAccessToken(credentials: MpesaCredentialRow): Promis
       502,
       darajaErrorMessage(payload, "Daraja token request failed."),
       "DARAJA_TOKEN_FAILED",
-      payload
+      {
+        stage: "oauth",
+        status: response.status,
+        environment: credentials.environment,
+        endpoint: darajaOAuthUrl(credentials.environment),
+        daraja: payload
+      }
     );
   }
 
-  return payload.access_token;
+  return payload.access_token.trim();
 }
 
 async function registerDarajaCallbacks(credentials: MpesaCredentialRow): Promise<DarajaRegisterResponse> {
@@ -214,7 +221,8 @@ async function registerDarajaCallbacks(credentials: MpesaCredentialRow): Promise
   const response = await fetch(darajaRegisterUrl(credentials.environment), {
     method: "POST",
     headers: {
-      authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
       "content-type": "application/json"
     },
     body: JSON.stringify({
@@ -231,7 +239,14 @@ async function registerDarajaCallbacks(credentials: MpesaCredentialRow): Promise
       502,
       darajaErrorMessage(payload, "Daraja callback registration failed."),
       "DARAJA_REGISTER_FAILED",
-      payload
+      {
+        stage: "register-callbacks",
+        status: response.status,
+        environment: credentials.environment,
+        shortCode: credentials.business_shortcode,
+        endpoint: darajaRegisterUrl(credentials.environment),
+        daraja: payload
+      }
     );
   }
 
