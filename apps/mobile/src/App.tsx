@@ -113,10 +113,20 @@ function buildDayKeys(payments: PaymentSummary[], preset: DatePreset) {
   return keys;
 }
 
-function incrementMapRow(map: Map<string, { count: number; amount: number }>, key: string, payment: PaymentSummary) {
+function settlementMultiplier(commissionRatePct?: string | number) {
+  const commissionRate = Number(commissionRatePct ?? 0);
+  if (!Number.isFinite(commissionRate)) return 1;
+  return Math.max(0, (100 - commissionRate) / 100);
+}
+
+function settlementAmount(payment: PaymentSummary, multiplier: number) {
+  return amount(payment) * multiplier;
+}
+
+function incrementMapRow(map: Map<string, { count: number; amount: number }>, key: string, payment: PaymentSummary, multiplier: number) {
   const current = map.get(key) ?? { count: 0, amount: 0 };
   current.count += 1;
-  current.amount += amount(payment);
+  current.amount += settlementAmount(payment, multiplier);
   map.set(key, current);
 }
 
@@ -140,7 +150,7 @@ function currentMonthRange() {
   };
 }
 
-function buildAnalytics(payments: PaymentSummary[], preset: DatePreset, mode: DateMode = "payment"): Analytics {
+function buildAnalytics(payments: PaymentSummary[], preset: DatePreset, mode: DateMode = "payment", multiplier = 1): Analytics {
   const filteredPayments = payments.filter((payment) => paymentInPresetByMode(payment, preset, mode));
   const dailyMap = new Map<string, DailyPoint>();
   const staffMap = new Map<string, { count: number; amount: number }>();
@@ -154,7 +164,7 @@ function buildAnalytics(payments: PaymentSummary[], preset: DatePreset, mode: Da
   }
 
   for (const payment of filteredPayments) {
-    const value = amount(payment);
+    const value = settlementAmount(payment, multiplier);
     const key = paymentDateKey(payment, mode);
     total += value;
     if (payment.verifiedStatus) verified += 1;
@@ -168,22 +178,22 @@ function buildAnalytics(payments: PaymentSummary[], preset: DatePreset, mode: Da
     }
 
     if (payment.verifiedBy?.fullName || payment.verifiedBy?.username) {
-      incrementMapRow(staffMap, payment.verifiedBy.fullName || payment.verifiedBy.username, payment);
+      incrementMapRow(staffMap, payment.verifiedBy.fullName || payment.verifiedBy.username, payment, multiplier);
     }
-    incrementMapRow(channelMap, payment.paymentChannel || "M-Pesa", payment);
+    incrementMapRow(channelMap, payment.paymentChannel || "M-Pesa", payment, multiplier);
   }
 
   const today = inputDate(new Date());
   const monthRange = currentMonthRange();
   const todayTotal = payments
     .filter((payment) => paymentDateKey(payment, mode) === today)
-    .reduce((sum, payment) => sum + amount(payment), 0);
+    .reduce((sum, payment) => sum + settlementAmount(payment, multiplier), 0);
   const monthTotal = payments
     .filter((payment) => {
       const key = paymentDateKey(payment, mode);
       return key >= monthRange.from && key <= monthRange.to;
     })
-    .reduce((sum, payment) => sum + amount(payment), 0);
+    .reduce((sum, payment) => sum + settlementAmount(payment, multiplier), 0);
 
   const toRows = (map: Map<string, { count: number; amount: number }>) =>
     [...map.entries()]
@@ -210,16 +220,16 @@ function presetLabel(preset: DatePreset) {
   return datePresetOptions.find((option) => option.value === preset)?.label ?? "Selected period";
 }
 
-function totalForRange(payments: PaymentSummary[], from: string, to: string, mode: DateMode) {
+function totalForRange(payments: PaymentSummary[], from: string, to: string, mode: DateMode, multiplier = 1) {
   return payments
     .filter((payment) => {
       const key = paymentDateKey(payment, mode);
       return key >= from && key <= to;
     })
-    .reduce((sum, payment) => sum + amount(payment), 0);
+    .reduce((sum, payment) => sum + settlementAmount(payment, multiplier), 0);
 }
 
-function buildTrendSummary(payments: PaymentSummary[], preset: DatePreset, currentTotal: number, mode: DateMode): TrendSummary {
+function buildTrendSummary(payments: PaymentSummary[], preset: DatePreset, currentTotal: number, mode: DateMode, multiplier = 1): TrendSummary {
   if (preset === "all") {
     return { direction: "flat", percent: 0, previousTotal: 0 };
   }
@@ -230,7 +240,7 @@ function buildTrendSummary(payments: PaymentSummary[], preset: DatePreset, curre
   const spanDays = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1);
   const previousTo = addDays(range.from, -1);
   const previousFrom = addDays(previousTo, -(spanDays - 1));
-  const previousTotal = totalForRange(payments, previousFrom, previousTo, mode);
+  const previousTotal = totalForRange(payments, previousFrom, previousTo, mode, multiplier);
   const diff = currentTotal - previousTotal;
   const percent = previousTotal > 0 ? Math.round((Math.abs(diff) / previousTotal) * 100) : currentTotal > 0 ? 100 : 0;
 
@@ -689,11 +699,11 @@ function HomeScreen({
       {error ? <ErrorBanner message={error} onRetry={onRefresh} /> : null}
       <section className="hero-card">
         <div className="hero-heading">
-          <p className="eyebrow">Business volume</p>
+          <p className="eyebrow">Business settlement</p>
           <span className="count-badge">{dashboard?.kpis.paidTransactions ?? analytics.count} payments</span>
         </div>
         <h2>{money(dashboard?.kpis.totalPaymentVolume ?? analytics.total)}</h2>
-        <p>{status === "loading" ? "Refreshing latest business activity" : `${money(todayCollections)} collected today`}</p>
+        <p>{status === "loading" ? "Refreshing latest business activity" : `${money(todayCollections)} net today`}</p>
       </section>
 
       <div className="collection-grid">
@@ -702,7 +712,7 @@ function HomeScreen({
             <CalendarDays size={20} />
           </span>
           <div>
-            <span>Today collections</span>
+            <span>Today net</span>
             <strong>{money(todayCollections)}</strong>
             <small>{inputDate(new Date())}</small>
           </div>
@@ -712,7 +722,7 @@ function HomeScreen({
             <WalletCards size={20} />
           </span>
           <div>
-            <span>This month</span>
+            <span>This month net</span>
             <strong>{money(monthCollections)}</strong>
             <small>{monthTitle(new Date())}</small>
           </div>
@@ -774,10 +784,13 @@ function BarTrend({ points }: { points: DailyPoint[] }) {
   );
 }
 
-function InsightsScreen({ payments }: { payments: PaymentSummary[] }) {
+function InsightsScreen({ payments, settlementRate }: { payments: PaymentSummary[]; settlementRate: number }) {
   const [preset, setPreset] = useState<DatePreset>("30d");
-  const analytics = useMemo(() => buildAnalytics(payments, preset), [payments, preset]);
-  const trend = useMemo(() => buildTrendSummary(payments, preset, analytics.total, "payment"), [analytics.total, payments, preset]);
+  const analytics = useMemo(() => buildAnalytics(payments, preset, "payment", settlementRate), [payments, preset, settlementRate]);
+  const trend = useMemo(
+    () => buildTrendSummary(payments, preset, analytics.total, "payment", settlementRate),
+    [analytics.total, payments, preset, settlementRate]
+  );
   const TrendIcon = trend.direction === "up" ? ArrowUpRight : trend.direction === "down" ? ArrowDownRight : Minus;
 
   return (
@@ -801,7 +814,7 @@ function InsightsScreen({ payments }: { payments: PaymentSummary[] }) {
 
       <section className="insight-total-card">
         <div>
-          <p className="eyebrow">{presetLabel(preset)} received</p>
+          <p className="eyebrow">{presetLabel(preset)} settlement</p>
           <strong>{money(analytics.total)}</strong>
           <span>{analytics.count} payments in this filter</span>
         </div>
@@ -815,7 +828,7 @@ function InsightsScreen({ payments }: { payments: PaymentSummary[] }) {
         <div className="section-heading compact">
           <div>
             <p className="eyebrow">Revenue trend</p>
-            <h2>Daily received</h2>
+            <h2>Daily settlement</h2>
             <p>Compared with {money(trend.previousTotal, true)} in the previous period</p>
           </div>
           <BarChart3 size={20} />
@@ -872,7 +885,7 @@ function InsightsScreen({ payments }: { payments: PaymentSummary[] }) {
   );
 }
 
-function SummaryScreen({ payments }: { payments: PaymentSummary[] }) {
+function SummaryScreen({ payments, settlementRate }: { payments: PaymentSummary[]; settlementRate: number }) {
   const [anchor, setAnchor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => inputDate(new Date()));
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -885,13 +898,13 @@ function SummaryScreen({ payments }: { payments: PaymentSummary[] }) {
       const key = dateKey(payment.paymentTime);
       if (!key) continue;
       const current = map.get(key) ?? { key, total: 0, count: 0, verified: 0 };
-      current.total += amount(payment);
+      current.total += settlementAmount(payment, settlementRate);
       current.count += 1;
       if (payment.verifiedStatus) current.verified += 1;
       map.set(key, current);
     }
     return map;
-  }, [payments]);
+  }, [payments, settlementRate]);
 
   const days = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(calendarStart);
@@ -1360,7 +1373,8 @@ export function App() {
 
   const isManager = auth.user.role === "manager";
   const isWaiter = auth.user.role === "waiter";
-  const analytics = buildAnalytics(payments, "30d");
+  const managerSettlementRate = settlementMultiplier(dashboard?.kpis.commissionRatePct);
+  const analytics = buildAnalytics(payments, "30d", "payment", managerSettlementRate);
   const title =
     tab === "home" ? "Business home" :
     tab === "insights" ? "Insights" :
@@ -1394,8 +1408,8 @@ export function App() {
         {tab === "verify" ? (
           <VerifyScreen token={auth.accessToken} onVerified={isManager ? updateVerifiedPayment : isWaiter ? updateWaiterSale : undefined} />
         ) : null}
-        {isManager && tab === "insights" ? <InsightsScreen payments={payments} /> : null}
-        {isManager && tab === "summary" ? <SummaryScreen payments={payments} /> : null}
+        {isManager && tab === "insights" ? <InsightsScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
+        {isManager && tab === "summary" ? <SummaryScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
         {isManager && tab === "staff" ? (
           <StaffScreen
             currentUserId={auth.user.id}

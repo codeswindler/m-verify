@@ -7,6 +7,7 @@ import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { maskPhoneNumber, toSafeUser } from "../utils/format.js";
 
 type BusinessKpiRow = RowDataPacket & {
+  commission_rate_pct: string;
   transaction_count: number;
   total_volume: string | null;
   today_volume: string | null;
@@ -80,16 +81,21 @@ businessRouter.get(
 
     const [summaryRows] = await pool.execute<BusinessKpiRow[]>(
       `SELECT
+        COALESCE(t.commission_rate_pct, 0) AS commission_rate_pct,
         COUNT(p.id) AS transaction_count,
-        COALESCE(SUM(p.amount), 0) AS total_volume,
-        COALESCE(SUM(CASE WHEN DATE(COALESCE(p.payment_time, p.created_at)) = UTC_DATE() THEN p.amount ELSE 0 END), 0) AS today_volume,
+        COALESCE(SUM(p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100), 0) AS total_volume,
+        COALESCE(SUM(CASE
+          WHEN DATE(COALESCE(p.payment_time, p.created_at)) = UTC_DATE()
+          THEN p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100 ELSE 0 END), 0) AS today_volume,
         COALESCE(SUM(CASE
           WHEN COALESCE(p.payment_time, p.created_at) >= DATE_FORMAT(UTC_DATE(), '%Y-%m-01')
            AND COALESCE(p.payment_time, p.created_at) < DATE_ADD(LAST_DAY(UTC_DATE()), INTERVAL 1 DAY)
-          THEN p.amount ELSE 0 END), 0) AS month_volume,
+          THEN p.amount * (100 - COALESCE(t.commission_rate_pct, 0)) / 100 ELSE 0 END), 0) AS month_volume,
         COUNT(CASE WHEN p.verified_status = TRUE THEN 1 END) AS verified_count
-       FROM payments p
-       WHERE p.tenant_id = ? AND p.status = 'PAID'`,
+       FROM tenants t
+       LEFT JOIN payments p ON p.tenant_id = t.id AND p.status = 'PAID'
+       WHERE t.id = ?
+       GROUP BY t.id, t.commission_rate_pct`,
       [tenantId]
     );
 
@@ -123,6 +129,7 @@ businessRouter.get(
 
     response.json({
       kpis: {
+        commissionRatePct: String(summary?.commission_rate_pct ?? "0"),
         paidTransactions: Number(summary?.transaction_count ?? 0),
         totalPaymentVolume: String(summary?.total_volume ?? "0"),
         todayPaymentVolume: String(summary?.today_volume ?? "0"),

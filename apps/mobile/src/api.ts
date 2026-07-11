@@ -12,6 +12,7 @@ export const API_BASE_URL =
 
 export type BusinessDashboard = {
   kpis: {
+    commissionRatePct: string;
     paidTransactions: number;
     totalPaymentVolume: string;
     todayPaymentVolume: string;
