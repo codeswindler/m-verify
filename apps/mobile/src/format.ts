@@ -1,6 +1,7 @@
 import type { PaymentSummary } from "@m-verify/shared";
 
 export type DatePreset = "today" | "7d" | "30d" | "all";
+const kenyaTimeZone = "Africa/Nairobi";
 
 export function money(value: unknown, compact = false) {
   const numeric = Number(value ?? 0);
@@ -15,8 +16,14 @@ export function money(value: unknown, compact = false) {
 }
 
 export function inputDate(date: Date) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: kenyaTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 export function dateKey(value?: string | null) {
@@ -31,7 +38,8 @@ export function dateTime(value?: string | null) {
     month: "short",
     day: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
+    timeZone: kenyaTimeZone
   }).format(new Date(value));
 }
 
@@ -39,8 +47,9 @@ export function dateLabel(value: string) {
   return new Intl.DateTimeFormat("en-KE", {
     weekday: "short",
     month: "short",
-    day: "numeric"
-  }).format(new Date(`${value}T00:00:00`));
+    day: "numeric",
+    timeZone: kenyaTimeZone
+  }).format(new Date(`${value}T00:00:00+03:00`));
 }
 
 export function paymentName(payment: PaymentSummary) {
@@ -53,9 +62,8 @@ export function amount(payment: PaymentSummary) {
 }
 
 export function datesForPreset(preset: DatePreset) {
-  const today = new Date();
-  const to = inputDate(today);
-  const from = new Date(today);
+  const to = inputDate(new Date());
+  const from = new Date(`${to}T12:00:00+03:00`);
 
   if (preset === "today") {
     return { from: to, to };
@@ -85,6 +93,7 @@ export function paymentInPreset(payment: PaymentSummary, preset: DatePreset) {
 export function monthTitle(date: Date) {
   return new Intl.DateTimeFormat("en-KE", {
     month: "long",
-    year: "numeric"
+    year: "numeric",
+    timeZone: kenyaTimeZone
   }).format(date);
 }

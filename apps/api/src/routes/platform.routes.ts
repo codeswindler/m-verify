@@ -41,8 +41,8 @@ platformRouter.get(
         COUNT(p.id) AS transaction_count,
         COALESCE(SUM(p.amount), 0) AS total_volume,
         COALESCE(SUM(p.amount * COALESCE(t.commission_rate_pct, 0) / 100), 0) AS platform_revenue,
-        COALESCE(SUM(CASE WHEN DATE(p.created_at) = UTC_DATE() THEN p.amount ELSE 0 END), 0) AS today_volume,
-        COALESCE(SUM(CASE WHEN DATE(p.created_at) = UTC_DATE()
+        COALESCE(SUM(CASE WHEN DATE(DATE_ADD(COALESCE(p.payment_time, p.created_at), INTERVAL 3 HOUR)) = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3 HOUR)) THEN p.amount ELSE 0 END), 0) AS today_volume,
+        COALESCE(SUM(CASE WHEN DATE(DATE_ADD(COALESCE(p.payment_time, p.created_at), INTERVAL 3 HOUR)) = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3 HOUR))
           THEN p.amount * COALESCE(t.commission_rate_pct, 0) / 100 ELSE 0 END), 0) AS today_platform_revenue
        FROM tenants t
        LEFT JOIN payments p ON p.tenant_id = t.id AND p.status = 'PAID'

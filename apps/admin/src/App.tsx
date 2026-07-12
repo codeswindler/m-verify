@@ -79,7 +79,7 @@ function defaultTab(auth: AuthResponse | null): Tab {
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-KE", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Nairobi" }).format(new Date(value));
 }
 
 function formatAmount(value: string | number): string {

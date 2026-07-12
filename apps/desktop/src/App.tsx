@@ -77,7 +77,7 @@ function formatAmount(value: string | number): string {
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-KE", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi" }).format(new Date(value));
 }
 
 function compareVersions(left: string, right: string): number {

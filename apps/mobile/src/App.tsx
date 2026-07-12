@@ -968,7 +968,7 @@ function BarTrend({ points }: { points: DailyPoint[] }) {
             <div className="bar-track">
               <div className={`bar-fill ${tone}`} style={{ height }} />
             </div>
-            <small>{new Date(`${point.key}T00:00:00`).toLocaleDateString("en-KE", { weekday: "short" })}</small>
+            <small>{new Date(`${point.key}T00:00:00+03:00`).toLocaleDateString("en-KE", { weekday: "short", timeZone: "Africa/Nairobi" })}</small>
           </div>
         );
       })}
