@@ -1010,10 +1010,10 @@ function InsightsScreen({ payments, settlementRate }: { payments: PaymentSummary
           <strong>{money(analytics.total)}</strong>
           <span>{analytics.count} payments in this filter</span>
         </div>
-        <span className={`trend-pill ${trend.direction}`}>
+        {preset !== "all" && <span className={`trend-pill ${trend.direction}`}>
           <TrendIcon size={18} />
           {trend.direction === "flat" ? "0%" : `${trend.percent}%`}
-        </span>
+        </span>}
       </section>
 
       <section className="section-card">
@@ -1225,10 +1225,10 @@ function StaffSalesScreen({
           <strong>{money(analytics.total)}</strong>
           <span>{analytics.count} receipts reconciled</span>
         </div>
-        <span className={`trend-pill ${trend.direction}`}>
+        {preset !== "all" && <span className={`trend-pill ${trend.direction}`}>
           <TrendIcon size={18} />
           {trend.direction === "flat" ? "0%" : `${trend.percent}%`}
-        </span>
+        </span>}
       </section>
 
       <div className="collection-grid">
