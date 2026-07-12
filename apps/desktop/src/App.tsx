@@ -146,6 +146,19 @@ function UpdateBanner({ update }: { update: UpdatePromptState | null }) {
   );
 }
 
+function UpdateDialog({ update, onDismiss }: { update: UpdatePromptState; onDismiss: () => void }) {
+  return (
+    <div className="update-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Update available">
+      <div className="update-dialog">
+        <UpdateBanner update={update} />
+        <button type="button" className="small-button" onClick={onDismiss}>
+          Later
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Titlebar({
   auth,
   alwaysTop,
@@ -764,7 +777,10 @@ function LoggedInApp({ auth, update, onLogout }: { auth: AuthResponse; update: U
     return (
       <main className="screen">
         <Titlebar auth={auth} alwaysTop={alwaysTop} onToggleTop={() => void toggleAlwaysTop()} onLogout={() => void logout()} />
-        <PlatformAdminView />
+        <section className="content">
+          <UpdateBanner update={update} />
+          <PlatformAdminView />
+        </section>
       </main>
     );
   }
@@ -806,6 +822,7 @@ export function App() {
     return raw ? (JSON.parse(raw) as AuthResponse) : null;
   });
   const [update, setUpdate] = useState<UpdatePromptState | null>(null);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
   useEffect(() => {
     void enableAutostartOnce();
@@ -844,12 +861,23 @@ export function App() {
       }
     }
     void checkForUpdate();
-    const timer = window.setInterval(checkForUpdate, 30 * 60 * 1000);
+    const onFocus = () => void checkForUpdate();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = window.setInterval(checkForUpdate, 5 * 60 * 1000);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (auth && update) {
+      setShowUpdateDialog(true);
+    }
+  }, [auth, update?.latestVersion]);
 
   function saveAuth(next: AuthResponse) {
     localStorage.setItem(authKey, JSON.stringify(next));
@@ -861,5 +889,10 @@ export function App() {
     setAuth(null);
   }
 
-  return auth ? <LoggedInApp auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />;
+  return (
+    <>
+      {auth ? <LoggedInApp auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />}
+      {auth && update && showUpdateDialog ? <UpdateDialog update={update} onDismiss={() => setShowUpdateDialog(false)} /> : null}
+    </>
+  );
 }
