@@ -111,13 +111,12 @@ authRouter.post(
       throw new AppError(401, "Refresh token is invalid or expired", "INVALID_REFRESH_TOKEN");
     }
 
-    const newRefreshToken = createRefreshToken();
     const expiresAt = refreshExpiryDate();
     await pool.execute(
       `UPDATE device_sessions
-       SET refresh_token_hash = ?, expires_at = ?, last_seen_at = UTC_TIMESTAMP()
+       SET expires_at = ?, last_seen_at = UTC_TIMESTAMP()
        WHERE id = ?`,
-      [hashRefreshToken(newRefreshToken), toMysqlDate(expiresAt), session.id]
+      [toMysqlDate(expiresAt), session.id]
     );
 
     const safeUser = toSafeUser({
@@ -138,7 +137,7 @@ authRouter.post(
     response.json({
       user: safeUser,
       accessToken,
-      refreshToken: newRefreshToken,
+      refreshToken,
       expiresIn
     });
   })

@@ -1,4 +1,4 @@
-import type { AuthResponse } from "@m-verify/shared";
+import { withAccessTokenExpiry, type AuthResponse } from "@m-verify/shared";
 
 const sessionKey = "mverify_mobile_auth";
 const deviceKey = "mverify_mobile_device_id";
@@ -24,7 +24,9 @@ export async function loadSession() {
 }
 
 export async function saveSession(auth: AuthResponse) {
-  localStorage.setItem(sessionKey, JSON.stringify(auth));
+  const stored = withAccessTokenExpiry(auth);
+  localStorage.setItem(sessionKey, JSON.stringify(stored));
+  return stored;
 }
 
 export async function clearSession() {

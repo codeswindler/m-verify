@@ -151,6 +151,37 @@ dl {
   text-transform: uppercase;
 }
 
+.password-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3rem;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: #0c130f;
+}
+
+.password-input:focus-within {
+  border-color: rgba(87, 230, 130, 0.62);
+  box-shadow: 0 0 0 3px rgba(87, 230, 130, 0.12);
+}
+
+.password-input input {
+  min-width: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.password-input button {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
 .primary-button,
 .icon-button,
 .bottom-nav button,

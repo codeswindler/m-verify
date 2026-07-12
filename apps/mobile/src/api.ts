@@ -37,12 +37,23 @@ type RequestOptions = {
   body?: unknown;
 };
 
-async function parseError(response: Response): Promise<Error> {
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export function isAuthenticationError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+async function parseError(response: Response): Promise<ApiError> {
   try {
     const payload = (await response.json()) as { message?: string; error?: string };
-    return new Error(payload.message ?? payload.error ?? `Request failed with ${response.status}`);
+    return new ApiError(payload.message ?? payload.error ?? `Request failed with ${response.status}`, response.status);
   } catch {
-    return new Error(`Request failed with ${response.status}`);
+    return new ApiError(`Request failed with ${response.status}`, response.status);
   }
 }
 

@@ -33,6 +33,17 @@ type RequestOptions = {
   body?: unknown;
 };
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export function isAuthenticationError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   let response: Response;
   try {
@@ -56,7 +67,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     } catch {
       // Keep the status-based message when the body is not JSON.
     }
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
 
   return response.json() as Promise<T>;
@@ -68,6 +79,9 @@ export const api = {
   },
   login(payload: { username: string; password: string; deviceId: string; deviceName?: string }) {
     return request<AuthResponse>("/auth/login", { method: "POST", body: payload });
+  },
+  refresh(payload: { refreshToken: string; deviceId: string }) {
+    return request<AuthResponse>("/auth/refresh", { method: "POST", body: payload });
   },
   businessDashboard(token: string) {
     return request<BusinessDashboard>("/business/dashboard", { token });

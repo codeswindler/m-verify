@@ -30,10 +30,11 @@ import type {
   UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
-import { defaultPermissionsForRole } from "@m-verify/shared";
+import { accessTokenRefreshDelay, defaultPermissionsForRole, withAccessTokenExpiry } from "@m-verify/shared";
 import {
   api,
   downloadCsv,
+  isAuthenticationError,
   type AdminUser,
   type BusinessDashboard,
   type CreateTenantPayload,
@@ -1279,7 +1280,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
                   {loading && <Loader2 className="spin" size={17} />}
                   {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>
-                {!loading && <button type="button" onClick={closeStkFlow}>Not now</button>}
+                {!loading && <button type="button" onClick={closeStkFlow}>{stkPayment.verifiedStatus ? "Close" : "Not now"}</button>}
               </>
             ) : (
               <>
@@ -1478,18 +1479,73 @@ export function App() {
   });
   const [tab, setTab] = useState<Tab>(() => defaultTab(auth));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [authReady, setAuthReady] = useState(false);
 
   function saveAuth(next: AuthResponse) {
-    localStorage.setItem(tokenKey, JSON.stringify(next));
-    setAuth(next);
-    setTab(defaultTab(next));
+    const stored = withAccessTokenExpiry(next);
+    localStorage.setItem(tokenKey, JSON.stringify(stored));
+    setAuth(stored);
+    setAuthReady(true);
+    setTab(defaultTab(stored));
   }
 
   function logout() {
+    const current = auth;
     localStorage.removeItem(tokenKey);
     setAuth(null);
+    setAuthReady(true);
     setTab("verify");
+    if (current) void api.logout(current.accessToken, current.refreshToken);
   }
+
+  useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const clearStoredAuth = () => {
+      localStorage.removeItem(tokenKey);
+      setAuth(null);
+      setAuthReady(true);
+      setTab("verify");
+    };
+
+    const refreshSession = async () => {
+      try {
+        const next = withAccessTokenExpiry(await api.refresh({ refreshToken: auth.refreshToken, deviceId: getDeviceId() }));
+        if (cancelled) return;
+        localStorage.setItem(tokenKey, JSON.stringify(next));
+        setAuth(next);
+        setAuthReady(true);
+      } catch (error) {
+        if (cancelled) return;
+        if (isAuthenticationError(error)) {
+          clearStoredAuth();
+          return;
+        }
+        setAuthReady(Boolean(auth.accessTokenExpiresAt && auth.accessTokenExpiresAt > Date.now()));
+        timer = window.setTimeout(() => void refreshSession(), 30_000);
+      }
+    };
+
+    const delay = accessTokenRefreshDelay(auth);
+    if (delay === 0) {
+      setAuthReady(false);
+      void refreshSession();
+    } else {
+      setAuthReady(true);
+      timer = window.setTimeout(() => void refreshSession(), delay);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [auth?.accessToken, auth?.refreshToken, auth?.accessTokenExpiresAt]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((current) => current.map((item) => item.id === id ? { ...item, exiting: true } : item));
@@ -1510,8 +1566,9 @@ export function App() {
     window.setTimeout(() => dismissToast(id), toastDurationMs);
   }, [dismissToast]);
 
-  useTransactionPoller(auth?.accessToken ?? null, auth?.user.role === "manager", addPaymentToast);
+  useTransactionPoller(authReady ? auth?.accessToken ?? null : null, authReady && auth?.user.role === "manager", addPaymentToast);
 
+  if (!authReady) return <main className="session-restoring"><RefreshCw className="spin" size={30} /><strong>Restoring session</strong><span>Connecting securely...</span></main>;
   if (!auth) return <LoginView onLogin={saveAuth} />;
   const isPlatform = auth.user.role === "admin";
   const title = isPlatform ? "M-Verify Platform" : auth.user.tenantName ?? "Business Portal";

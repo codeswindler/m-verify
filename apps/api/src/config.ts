@@ -88,7 +88,8 @@ export const config = {
       "https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query",
     stkQueryProductionUrl:
       process.env.DARAJA_STK_QUERY_PRODUCTION_URL ??
-      "https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query"
+      "https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query",
+    stkPromptTimeoutMinutes: Math.min(15, Math.max(2, Math.round(toNumber("STK_PROMPT_TIMEOUT_MINUTES", 5))))
   },
   rateLimit: {
     windowMs: toNumber("RATE_LIMIT_WINDOW_MS", 60_000),

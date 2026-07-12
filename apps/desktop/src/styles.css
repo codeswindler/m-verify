@@ -592,6 +592,27 @@ input:focus {
   line-height: 1.5;
 }
 
+.session-restoring {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  background: #f7faf8;
+  color: #237a4b;
+  text-align: center;
+}
+
+.session-restoring strong {
+  color: #17211c;
+  font-size: 17px;
+}
+
+.session-restoring span {
+  color: #69786f;
+  font-size: 12px;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;

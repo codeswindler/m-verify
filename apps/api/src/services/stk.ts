@@ -248,7 +248,7 @@ export async function initiateStkPrompt(input: { phoneNumber: string; amount: nu
 
   const [insert] = await pool.execute<ResultSetHeader>(
     `INSERT INTO stk_prompt_requests (tenant_id, user_id, device_session_id, phone_number, amount, reference, status, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'REQUESTED', DATE_ADD(UTC_TIMESTAMP(), INTERVAL 2 MINUTE))`,
+     VALUES (?, ?, ?, ?, ?, ?, 'REQUESTED', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ${config.daraja.stkPromptTimeoutMinutes} MINUTE))`,
     [tenantId, auth.user.id, auth.sessionId, phoneNumber, amount, reference]
   );
 

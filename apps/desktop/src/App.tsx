@@ -18,10 +18,12 @@ import {
   Users,
   XCircle
 } from "lucide-react";
+import { accessTokenRefreshDelay, withAccessTokenExpiry } from "@m-verify/shared";
 import type { AuthResponse, PaymentSummary, StkPromptResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
 import {
   api,
   API_BASE_URL,
+  isAuthenticationError,
   type BusinessDashboard,
   type DesktopUser
 } from "./api";
@@ -598,7 +600,7 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
                   {loading && <Loader2 className="spin" size={16} />}
                   {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>
-                {!loading && <button className="small-button" type="button" onClick={closeStkFlow}>Not now</button>}
+                {!loading && <button className="small-button" type="button" onClick={closeStkFlow}>{stkPayment.verifiedStatus ? "Close" : "Not now"}</button>}
               </>
             ) : (
               <>
@@ -918,6 +920,7 @@ export function App() {
   });
   const [update, setUpdate] = useState<UpdatePromptState | null>(null);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     void enableAutostartOnce();
@@ -979,9 +982,59 @@ export function App() {
     }
   }, [auth, update?.latestVersion]);
 
+  useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const clearStoredAuth = () => {
+      localStorage.removeItem(authKey);
+      setAuth(null);
+      setAuthReady(true);
+    };
+
+    const refreshSession = async () => {
+      try {
+        const next = withAccessTokenExpiry(await api.refresh({ refreshToken: auth.refreshToken, deviceId: getDeviceId() }));
+        if (cancelled) return;
+        localStorage.setItem(authKey, JSON.stringify(next));
+        setAuth(next);
+        setAuthReady(true);
+      } catch (error) {
+        if (cancelled) return;
+        if (isAuthenticationError(error)) {
+          clearStoredAuth();
+          return;
+        }
+        setAuthReady(Boolean(auth.accessTokenExpiresAt && auth.accessTokenExpiresAt > Date.now()));
+        timer = window.setTimeout(() => void refreshSession(), 30_000);
+      }
+    };
+
+    const delay = accessTokenRefreshDelay(auth);
+    if (delay === 0) {
+      setAuthReady(false);
+      void refreshSession();
+    } else {
+      setAuthReady(true);
+      timer = window.setTimeout(() => void refreshSession(), delay);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [auth?.accessToken, auth?.refreshToken, auth?.accessTokenExpiresAt]);
+
   function saveAuth(next: AuthResponse) {
-    localStorage.setItem(authKey, JSON.stringify(next));
-    setAuth(next);
+    const stored = withAccessTokenExpiry(next);
+    localStorage.setItem(authKey, JSON.stringify(stored));
+    setAuth(stored);
+    setAuthReady(true);
   }
 
   function logout() {
@@ -991,7 +1044,9 @@ export function App() {
 
   return (
     <>
-      {auth ? <LoggedInApp auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />}
+      {!authReady ? (
+        <main className="session-restoring"><Loader2 className="spin" size={28} /><strong>Restoring session</strong><span>Connecting securely...</span></main>
+      ) : auth ? <LoggedInApp auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />}
       {auth && update && showUpdateDialog ? <UpdateDialog update={update} onDismiss={() => setShowUpdateDialog(false)} /> : null}
     </>
   );

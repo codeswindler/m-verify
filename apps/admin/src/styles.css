@@ -1346,6 +1346,27 @@ tbody tr:hover td {
 .panel { animation: fadeInUp 220ms ease both; }
 .login-form-card { animation: fadeInUp 280ms ease both; }
 
+.session-restoring {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  background: var(--surface-2);
+  color: var(--brand);
+  text-align: center;
+}
+
+.session-restoring strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.session-restoring span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

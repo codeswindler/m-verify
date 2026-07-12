@@ -54,7 +54,20 @@ export type AuthResponse = {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  accessTokenExpiresAt?: number;
 };
+
+export function withAccessTokenExpiry(auth: AuthResponse): AuthResponse {
+  return {
+    ...auth,
+    accessTokenExpiresAt: Date.now() + Math.max(1, auth.expiresIn) * 1000
+  };
+}
+
+export function accessTokenRefreshDelay(auth: AuthResponse, earlyMs = 60_000): number {
+  if (!auth.accessTokenExpiresAt) return 0;
+  return Math.max(0, auth.accessTokenExpiresAt - Date.now() - earlyMs);
+}
 
 export type PaymentSummary = {
   id: number;

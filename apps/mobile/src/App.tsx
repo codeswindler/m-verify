@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   Home,
   Loader2,
   Lock,
@@ -23,9 +25,10 @@ import {
   WalletCards,
   XCircle
 } from "lucide-react";
-import { defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type StkPromptResponse, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
+import { accessTokenRefreshDelay, defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type StkPromptResponse, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
 import {
   api,
+  isAuthenticationError,
   loadTransactionArchive,
   type BusinessDashboard,
   type MobileStaffUser
@@ -309,6 +312,7 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<ApiStatus>("idle");
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -321,8 +325,8 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
         deviceId: getDeviceId(),
         deviceName: "M-Verify Mobile"
       });
-      await saveSession(auth);
-      onLogin(auth);
+      const stored = await saveSession(auth);
+      onLogin(stored);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
     } finally {
@@ -352,13 +356,18 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
           </label>
           <label>
             <span>Password</span>
-            <input
-              autoComplete="current-password"
-              placeholder="your password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
+            <div className="password-input">
+              <input
+                autoComplete="current-password"
+                placeholder="your password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button type="button" onClick={() => setShowPassword((visible) => !visible)} title={showPassword ? "Hide password" : "Show password"}>
+                {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+              </button>
+            </div>
           </label>
           {error ? (
             <div className="inline-error">
@@ -828,7 +837,7 @@ function VerifyScreen({
                   {verifying && <Loader2 className="spin" size={18} />}
                   {verifying ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>
-                {!verifying ? <button className="secondary-action" type="button" onClick={closeStkFlow}>Not now</button> : null}
+                {!verifying ? <button className="secondary-action" type="button" onClick={closeStkFlow}>{stkPayment.verifiedStatus ? "Close" : "Not now"}</button> : null}
               </>
             ) : (
               <>
@@ -1485,13 +1494,63 @@ export function App() {
       if (cancelled) return;
       setAuth(session);
       setTab(defaultTab(session));
-      setBooting(false);
+      if (!session) setBooting(false);
     }
     void boot();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!auth) {
+      setBooting(false);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const clearStoredAuth = async () => {
+      await clearSession();
+      if (cancelled) return;
+      setAuth(null);
+      setBooting(false);
+      setTab("verify");
+    };
+
+    const refreshSession = async () => {
+      try {
+        const refreshed = await api.refresh({ refreshToken: auth.refreshToken, deviceId: getDeviceId() });
+        if (cancelled) return;
+        const next = await saveSession(refreshed);
+        setAuth(next);
+        setBooting(false);
+      } catch (error) {
+        if (cancelled) return;
+        if (isAuthenticationError(error)) {
+          await clearStoredAuth();
+          return;
+        }
+        setBooting(!(auth.accessTokenExpiresAt && auth.accessTokenExpiresAt > Date.now()));
+        timer = window.setTimeout(() => void refreshSession(), 30_000);
+      }
+    };
+
+    const delay = accessTokenRefreshDelay(auth);
+    if (delay === 0) {
+      setBooting(true);
+      void refreshSession();
+    } else {
+      setBooting(false);
+      timer = window.setTimeout(() => void refreshSession(), delay);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [auth?.accessToken, auth?.refreshToken, auth?.accessTokenExpiresAt]);
 
   const refreshManagerData = useCallback(async () => {
     if (!auth || auth.user.role !== "manager") return;
@@ -1543,22 +1602,22 @@ export function App() {
   }, [auth]);
 
   useEffect(() => {
-    if (auth?.user.role === "manager" && (auth.user.permissions.dashboard || auth.user.permissions.transactions)) {
+    if (!booting && auth?.user.role === "manager" && (auth.user.permissions.dashboard || auth.user.permissions.transactions)) {
       void refreshManagerData();
     }
-  }, [auth?.accessToken, auth?.user.role, auth?.user.permissions.dashboard, auth?.user.permissions.transactions, refreshManagerData]);
+  }, [auth?.accessToken, auth?.user.role, auth?.user.permissions.dashboard, auth?.user.permissions.transactions, booting, refreshManagerData]);
 
   useEffect(() => {
-    if (auth?.user.role === "manager" && auth.user.permissions.staff && tab === "staff" && usersStatus === "idle") {
+    if (!booting && auth?.user.role === "manager" && auth.user.permissions.staff && tab === "staff" && usersStatus === "idle") {
       void refreshUsers();
     }
-  }, [auth?.user.role, auth?.user.permissions.staff, refreshUsers, tab, usersStatus]);
+  }, [auth?.user.role, auth?.user.permissions.staff, booting, refreshUsers, tab, usersStatus]);
 
   useEffect(() => {
-    if (auth?.user.role === "waiter" && auth.user.permissions.sales && tab === "sales" && salesStatus === "idle") {
+    if (!booting && auth?.user.role === "waiter" && auth.user.permissions.sales && tab === "sales" && salesStatus === "idle") {
       void refreshWaiterSales();
     }
-  }, [auth?.user.role, auth?.user.permissions.sales, refreshWaiterSales, salesStatus, tab]);
+  }, [auth?.user.role, auth?.user.permissions.sales, booting, refreshWaiterSales, salesStatus, tab]);
 
   function handleLogin(nextAuth: AuthResponse) {
     setAuth(nextAuth);
