@@ -125,6 +125,11 @@ function UpdateBanner({ update }: { update: UpdatePromptState | null }) {
       await installNativeUpdate(update.native, setProgress);
     } catch (err) {
       setInstalling(false);
+      if (update.manualDownloadUrl) {
+        setInstallError("Automatic install failed. Opening the installer download.");
+        await openExternalUrl(update.manualDownloadUrl);
+        return;
+      }
       setInstallError(err instanceof Error ? err.message : "Update installation failed");
     }
   }
@@ -836,18 +841,23 @@ export function App() {
     let cancelled = false;
     async function checkForUpdate() {
       try {
-        const nativeUpdate = await checkNativeUpdate();
+        const [currentVersion, latest, nativeUpdate] = await Promise.all([
+          getCurrentAppVersion(),
+          api.latestDesktopUpdate(),
+          checkNativeUpdate()
+        ]);
+
         if (!cancelled && nativeUpdate) {
           setUpdate({
             currentVersion: nativeUpdate.currentVersion,
             latestVersion: nativeUpdate.version,
             notes: nativeUpdate.notes,
+            manualDownloadUrl: latest.downloadUrl,
             native: nativeUpdate
           });
           return;
         }
 
-        const [currentVersion, latest] = await Promise.all([getCurrentAppVersion(), api.latestDesktopUpdate()]);
         if (!cancelled && compareVersions(latest.latestVersion, currentVersion) > 0) {
           setUpdate({
             currentVersion,
