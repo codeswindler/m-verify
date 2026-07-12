@@ -748,6 +748,7 @@ function PaymentsView({ token }: { token: string }) {
 
 function StaffView({ token }: { token: string }) {
   const [users, setUsers] = useState<DesktopUser[]>([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [form, setForm] = useState({ username: "", fullName: "", password: "", role: "waiter" as "manager" | "waiter" });
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -777,6 +778,7 @@ function StaffView({ token }: { token: string }) {
     try {
       await api.createUser(token, form);
       setForm({ username: "", fullName: "", password: "", role: "waiter" });
+      setShowCreateForm(false);
       setMessage("Staff user created.");
       await load();
     } catch (err) {
@@ -811,7 +813,14 @@ function StaffView({ token }: { token: string }) {
 
   return (
     <section className="view-stack">
-      <form className="staff-form" onSubmit={createStaff}>
+      <div className="view-heading">
+        <div><h2>Staff</h2><p>Manage business access</p></div>
+        <button type="button" className="small-button" onClick={() => setShowCreateForm((value) => !value)}>
+          {showCreateForm ? <XCircle size={14} /> : <UserPlus size={14} />}
+          {showCreateForm ? "Close" : "Add staff"}
+        </button>
+      </div>
+      {showCreateForm && <form className="staff-form" onSubmit={createStaff}>
         <input placeholder="Username" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
         <input placeholder="Full name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
         <div className="two-col">
@@ -819,13 +828,14 @@ function StaffView({ token }: { token: string }) {
             <option value="waiter">Waiter</option>
             <option value="manager">Business Admin</option>
           </select>
-          <input placeholder="Password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+          <input placeholder="Password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
         </div>
         <button className="primary" disabled={!form.username || !form.fullName || !form.password}>
           <UserPlus size={15} />
           Add staff
         </button>
-      </form>
+        <button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
+      </form>}
       {message && <div className="success">{message}</div>}
       {error && <div className="error">{error}</div>}
       <div className="panel-list">

@@ -1293,6 +1293,7 @@ function StaffScreen({
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   async function createStaff(event: FormEvent) {
     event.preventDefault();
@@ -1302,6 +1303,7 @@ function StaffScreen({
     try {
       await api.createUser(token, form);
       setForm({ username: "", fullName: "", password: "", role: "waiter", permissions: defaultPermissionsForRole("waiter") });
+      setShowCreateForm(false);
       setActionMessage("Staff user created.");
       await onRefresh();
     } catch (createError) {
@@ -1361,11 +1363,15 @@ function StaffScreen({
         <div className="section-heading compact">
           <div>
             <p className="eyebrow">Access</p>
-            <h2>Add staff</h2>
+            <h2>Staff access</h2>
           </div>
           <UserPlus size={20} />
         </div>
-        <form className="staff-form" onSubmit={createStaff}>
+        {!showCreateForm ? (
+          <button className="primary-button" type="button" onClick={() => setShowCreateForm(true)}>
+            <UserPlus size={18} /> Add staff
+          </button>
+        ) : <form className="staff-form" onSubmit={createStaff}>
           <input placeholder="Username" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
           <input placeholder="Full name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
           <div className="form-grid">
@@ -1397,7 +1403,8 @@ function StaffScreen({
             {saving ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
             {saving ? "Creating" : "Create staff"}
           </button>
-        </form>
+          <button className="secondary-action" type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
+        </form>}
       </section>
 
       {actionMessage ? <div className="success-note">{actionMessage}</div> : null}

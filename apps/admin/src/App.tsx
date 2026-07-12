@@ -470,6 +470,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
   const [selectedBusinessId, setSelectedBusinessId] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<BusinessPanel>("edit");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showStaffForm, setShowStaffForm] = useState(false);
   const [businessForm, setBusinessForm] = useState<CreateTenantPayload>(() => emptyBusinessForm());
   const [editForm, setEditForm] = useState<UpdateTenantPayload>(() => emptyBusinessForm());
   const [staffForm, setStaffForm] = useState<CreateUserPayload>({
@@ -530,6 +531,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     setEditForm(businessToForm(business));
     setMessage("");
     setError("");
+    setShowStaffForm(false);
   }
 
   async function createBusiness(event: React.FormEvent) {
@@ -651,6 +653,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
       await api.createUser(token, { ...staffForm, tenantId: selectedBusiness.id });
       setStaffForm({ username: "", fullName: "", role: "waiter", password: "", permissions: defaultPermissionsForRole("waiter") });
       setMessage("Business user created.");
+      setShowStaffForm(false);
       notify("Business user created", staffForm.username);
       await loadBusinesses(selectedBusiness.id);
     } catch (err) {
@@ -802,8 +805,14 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
 
             {activePanel === "staff" && (
               <div className="business-staff">
-                <form className="user-form" onSubmit={createBusinessUser}>
-                  <h2><UserPlus size={16} /> Add business user</h2>
+                <div className="section-header compact">
+                  <h2>Staff users</h2>
+                  <button className="primary" type="button" onClick={() => setShowStaffForm((value) => !value)}>
+                    <UserPlus size={14} /> {showStaffForm ? "Close" : "Add staff"}
+                  </button>
+                </div>
+                {showStaffForm && <form className="user-form" onSubmit={createBusinessUser}>
+                  <h2><UserPlus size={16} /> Add staff</h2>
                   <div className="form-grid two">
                     <label>Username<input value={staffForm.username} onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })} /></label>
                     <label>Full name<input value={staffForm.fullName} onChange={(event) => setStaffForm({ ...staffForm, fullName: event.target.value })} /></label>
@@ -828,8 +837,11 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                       </label>
                     ))}
                   </div>
-                  <button className="primary" disabled={loading}>Create business user</button>
-                </form>
+                  <div className="actions">
+                    <button className="primary" disabled={loading}>Create staff</button>
+                    <button type="button" onClick={() => setShowStaffForm(false)}>Cancel</button>
+                  </div>
+                </form>}
                 <div className="table-wrap">
                   <table>
                     <thead><tr><th>User</th><th>Role</th><th>Modules</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
@@ -1331,6 +1343,7 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
   const isPlatform = auth.user.role === "admin";
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [form, setForm] = useState<CreateUserPayload>({
     username: "",
     fullName: "",
@@ -1367,6 +1380,7 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
         tenantId: auth.user.tenantId ?? undefined,
         permissions: defaultPermissionsForRole(isPlatform ? "admin" : "waiter")
       });
+      setShowCreateForm(false);
       await load();
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Could not create user";
@@ -1424,12 +1438,17 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
     <>
       <div className="section-header">
         <h2>{isPlatform ? "Admin Users" : "Staff Access"}</h2>
-        <span className="section-badge">{visibleUsers.length} users</span>
+        <div className="actions">
+          <span className="section-badge">{visibleUsers.length} users</span>
+          <button className="primary" type="button" onClick={() => setShowCreateForm((value) => !value)}>
+            <UserPlus size={14} /> {showCreateForm ? "Close" : isPlatform ? "Add admin" : "Add staff"}
+          </button>
+        </div>
       </div>
-      <section className="panel split-panel">
-        <form className="user-form" onSubmit={createUser}>
+      {error && <div className="error">{error}</div>}
+      <section className={`panel ${showCreateForm ? "split-panel" : ""}`}>
+        {showCreateForm && <form className="user-form" onSubmit={createUser}>
           <h2><UserPlus size={16} /> {isPlatform ? "Add admin user" : "Add staff user"}</h2>
-          {error && <div className="error">{error}</div>}
           <label>Username<input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
           <label>Full name<input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></label>
           {isPlatform ? (
@@ -1458,8 +1477,11 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
               ))}
             </div>
           )}
-          <button className="primary">{isPlatform ? "Create admin" : "Create staff user"}</button>
-        </form>
+          <div className="actions">
+            <button className="primary">{isPlatform ? "Create admin" : "Create staff"}</button>
+            <button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
+          </div>
+        </form>}
         <div className="table-wrap">
           <table>
             <thead><tr><th>User</th><th>Role</th>{!isPlatform && <th>Modules</th>}<th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
