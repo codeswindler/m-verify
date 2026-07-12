@@ -380,6 +380,14 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
             {status === "loading" ? "Signing in" : "Sign in securely"}
           </button>
         </form>
+        <a
+          className="privacy-link"
+          href="https://m-verify.theleasemaster.com/privacy"
+          rel="noreferrer"
+          target="_blank"
+        >
+          Privacy Policy
+        </a>
       </section>
     </main>
   );
