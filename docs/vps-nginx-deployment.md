@@ -151,8 +151,8 @@ The signing key is required for in-app updates. Back up `C:\Users\william\.tauri
 Upload the generated installer twice: once as the stable portal download path and once as the versioned updater URL:
 
 ```powershell
-scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.4_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify-Setup.exe
-scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.4_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify_0.1.4_x64-setup.exe
+scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.8_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify-Setup.exe
+scp apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.8_x64-setup.exe wilson@157.173.114.45:/var/www/m-verify/downloads/M-Verify_0.1.8_x64-setup.exe
 ```
 
 The portal download button points to:
@@ -164,14 +164,14 @@ https://m-verify.theleasemaster.com/downloads/M-Verify-Setup.exe
 Read the generated updater signature:
 
 ```powershell
-Get-Content apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.4_x64-setup.exe.sig
+Get-Content apps/desktop/src-tauri/target/release/bundle/nsis/M-Verify_0.1.8_x64-setup.exe.sig
 ```
 
 To make updater-enabled desktop apps install the update in-app, set the latest version and signature in `/var/www/m-verify/.env.production`:
 
 ```env
-DESKTOP_LATEST_VERSION=0.1.4
-DESKTOP_UPDATER_URL=https://m-verify.theleasemaster.com/downloads/M-Verify_0.1.4_x64-setup.exe
+DESKTOP_LATEST_VERSION=0.1.8
+DESKTOP_UPDATER_URL=https://m-verify.theleasemaster.com/downloads/M-Verify_0.1.8_x64-setup.exe
 DESKTOP_UPDATER_SIGNATURE=paste-the-generated-exe-signature
 DESKTOP_UPDATER_PUB_DATE=2026-07-11T00:00:00Z
 DESKTOP_DOWNLOAD_URL=https://m-verify.theleasemaster.com/downloads/M-Verify-Setup.exe

@@ -194,6 +194,173 @@ dl {
   gap: 0.8rem;
 }
 
+.stk-form > .empty-state,
+.stk-form > .success-note,
+.stk-form > .inline-error {
+  display: none;
+}
+
+.stk-flow-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: calc(1rem + env(safe-area-inset-top)) 1rem calc(1rem + env(safe-area-inset-bottom));
+  background: rgba(2, 9, 5, 0.86);
+  backdrop-filter: blur(8px);
+}
+
+.stk-flow-dialog {
+  width: min(100%, 28rem);
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: #0b1710;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+  padding: 1.35rem;
+  display: grid;
+  gap: 1rem;
+  text-align: center;
+}
+
+.stk-flow-dialog.failed {
+  border-color: rgba(255, 107, 127, 0.5);
+}
+
+.stk-flow-visual {
+  position: relative;
+  display: grid;
+  width: 6.3rem;
+  height: 6.3rem;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid rgba(87, 230, 130, 0.35);
+  border-radius: 50%;
+  background: rgba(87, 230, 130, 0.08);
+  color: var(--green);
+}
+
+.stk-pulse-ring {
+  position: absolute;
+  inset: 0.7rem;
+  border: 2px solid rgba(87, 230, 130, 0.26);
+  border-radius: 50%;
+  animation: stkPulse 1.6s ease-out infinite;
+}
+
+.stk-flow-copy {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.stk-flow-copy h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.65rem;
+  line-height: 1.1;
+}
+
+.stk-flow-copy p,
+.stk-flow-dialog small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.stk-flow-kicker {
+  color: var(--green);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stk-flow-status-icon {
+  justify-self: center;
+  color: var(--green);
+}
+
+.stk-flow-dialog.failed .stk-flow-status-icon {
+  color: #ff6b7f;
+}
+
+.stk-flow-inline-error {
+  border: 1px solid rgba(255, 107, 127, 0.34);
+  border-radius: var(--r);
+  background: rgba(255, 107, 127, 0.12);
+  color: #ffd0d7;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.stk-flow-summary,
+.stk-flow-receipt {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  text-align: left;
+}
+
+.stk-flow-summary div,
+.stk-flow-receipt div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: #0c130f;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.stk-flow-summary span,
+.stk-flow-receipt span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.stk-flow-summary strong,
+.stk-flow-receipt strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stk-flow-progress {
+  height: 0.38rem;
+  overflow: hidden;
+  border-radius: 0.38rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stk-flow-progress span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  animation: stkScan 1.35s ease-in-out infinite;
+}
+
+@keyframes stkPulse {
+  0% { transform: scale(0.78); opacity: 1; }
+  100% { transform: scale(1.42); opacity: 0; }
+}
+
+@keyframes stkScan {
+  0% { transform: translateX(-115%); }
+  100% { transform: translateX(380%); }
+}
+
 .inline-error,
 .success-note,
 .error-banner {

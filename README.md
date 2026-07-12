@@ -89,12 +89,27 @@ Mobile app:
 - Local Vite dev: `http://localhost:5174`
 - Preview build: `pnpm --filter @m-verify/mobile preview`
 - Android debug APK: `pnpm --filter @m-verify/mobile android:debug`
+- Android release APK: `pnpm --filter @m-verify/mobile android:release`
+- Android Play Store AAB: `pnpm --filter @m-verify/mobile android:bundle`
 
 API:
 
 - `http://localhost:4000`
 
 For a phone-installed APK, build with `VITE_API_BASE_URL` set to a public HTTPS API URL or a LAN URL the phone can reach. `http://localhost:4000` works only when the app runs on the same machine as the API.
+
+Create and securely back up one Android upload key, then provide it when building release packages:
+
+```powershell
+keytool -genkeypair -v -keystore "$env:USERPROFILE\.android\m-verify-upload.jks" -alias m-verify -keyalg RSA -keysize 2048 -validity 10000
+$env:MVERIFY_ANDROID_KEYSTORE="$env:USERPROFILE\.android\m-verify-upload.jks"
+$env:MVERIFY_ANDROID_KEYSTORE_PASSWORD="your-keystore-password"
+$env:MVERIFY_ANDROID_KEY_ALIAS="m-verify"
+$env:MVERIFY_ANDROID_KEY_PASSWORD="your-key-password"
+pnpm --filter @m-verify/mobile android:bundle
+```
+
+Never commit the keystore or its passwords. Google Play uses the `.aab`; a directly installed production build uses the signed release `.apk`.
 
 ## Live Deployment
 

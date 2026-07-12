@@ -1,7 +1,7 @@
 {
   "name": "@m-verify/mobile",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174",
@@ -13,7 +13,8 @@
     "cap:open:android": "cap open android",
     "android:build": "powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1 all",
     "android:debug": "powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1 debug",
-    "android:release": "powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1 release"
+    "android:release": "powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1 release",
+    "android:bundle": "powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1 bundle"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",

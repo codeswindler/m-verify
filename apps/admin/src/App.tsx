@@ -6,6 +6,7 @@ import {
   Download,
   Eye,
   KeyRound,
+  Loader2,
   LogOut,
   ReceiptText,
   RefreshCw,
@@ -15,7 +16,8 @@ import {
   UserPlus,
   Users as UsersIcon,
   WalletCards,
-  X
+  X,
+  XCircle
 } from "lucide-react";
 import type {
   AuthResponse,
@@ -93,6 +95,10 @@ function StatusBadge({ value }: { value: string }) {
   return <span className={`status status-${value.toLowerCase().replace(/_/g, "-")}`}>{value.replace(/_/g, " ")}</span>;
 }
 
+function WindowsMark() {
+  return <span className="windows-mark" aria-hidden="true"><i /><i /><i /><i /></span>;
+}
+
 function LoginView({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -154,7 +160,7 @@ function LoginView({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
           {error && <div className="error">{error}</div>}
           <button className="primary login-sign-btn" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
           <a className="desktop-download-link" href={desktopDownloadUrl} download>
-            <Download size={15} />
+            <WindowsMark />
             Download Windows App
           </a>
         </form>
@@ -1004,6 +1010,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
   const [stkReference, setStkReference] = useState("");
   const [stkPrompt, setStkPrompt] = useState<StkPromptResponse | null>(null);
   const [stkLoading, setStkLoading] = useState(false);
+  const [stkFlowError, setStkFlowError] = useState("");
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -1075,30 +1082,31 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
     const timer = window.setInterval(async () => {
       try {
         const prompt = await api.getStkPrompt(token, stkPrompt.id);
+        setStkFlowError("");
         setStkPrompt(prompt);
         if (prompt.payment) {
           setSelectedPayment(prompt.payment);
           setPayments([prompt.payment]);
           setQuery("");
           setResult(null);
-          notify("STK payment received", "Select verify to complete the waiter check.", "success");
+          notify("STK payment received", "Confirm the payment in the open STK window.", "success");
         }
       } catch (err) {
         const messageText = err instanceof Error ? err.message : "Could not check STK prompt";
-        setStkPrompt((current) => current ? { ...current, status: "FAILED", message: messageText } : current);
-        notify("STK prompt check failed", messageText, "error");
+        setStkFlowError(`${messageText} Retrying...`);
       }
     }, 3000);
     return () => window.clearInterval(timer);
   }, [notify, stkPrompt, token]);
 
   async function sendStkPrompt() {
-    const amount = Number(stkAmount);
+    const amount = Math.round(Number(stkAmount));
     if (!stkPhone.trim() || !Number.isFinite(amount) || amount <= 0) {
       setError("Enter customer phone and amount for STK prompt.");
       return;
     }
     setError("");
+    setStkFlowError("");
     setResult(null);
     setStkPrompt(null);
     setStkLoading(true);
@@ -1113,11 +1121,25 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "STK prompt failed";
       setError(messageText);
+      setStkFlowError(messageText);
       notify("STK prompt failed", messageText, "error");
     } finally {
       setStkLoading(false);
     }
   }
+
+  function closeStkFlow() {
+    setStkPrompt(null);
+    setStkFlowError("");
+    setStkLoading(false);
+    if (result?.result === "VERIFIED" || result?.result === "ALREADY_VERIFIED") setShowStk(false);
+  }
+
+  const stkWaiting = stkLoading || stkPrompt?.status === "REQUESTED" || stkPrompt?.status === "PENDING";
+  const stkFailed = (!stkPrompt && Boolean(stkFlowError))
+    || Boolean(stkPrompt && ["FAILED", "CANCELLED", "TIMED_OUT"].includes(stkPrompt.status));
+  const stkPayment = stkPrompt?.payment ?? (stkPrompt?.status === "PAID" ? selectedPayment ?? undefined : undefined);
+  const stkVerified = result?.result === "VERIFIED" || result?.result === "ALREADY_VERIFIED";
 
   return (
     <>
@@ -1130,7 +1152,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
           <div className="stk-panel">
             <div className="form-grid">
               <label>Mobile number<input value={stkPhone} onChange={(event) => setStkPhone(event.target.value)} placeholder="07..." /></label>
-              <label>Amount<input value={stkAmount} onChange={(event) => setStkAmount(event.target.value)} placeholder="KES" /></label>
+              <label>Amount<input value={stkAmount} onChange={(event) => setStkAmount(event.target.value)} inputMode="numeric" min="1" step="1" placeholder="KES" type="number" /></label>
               <label>Reference<input value={stkReference} onChange={(event) => setStkReference(event.target.value)} placeholder="Optional bill/table" /></label>
             </div>
             <button className="primary" type="button" onClick={() => void sendStkPrompt()} disabled={stkLoading}>
@@ -1213,6 +1235,66 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
           </div>
         )}
       </section>
+
+      {(stkLoading || stkPrompt || stkFlowError) && (
+        <div className="stk-flow-backdrop" role="dialog" aria-modal="true" aria-label="M-Pesa STK payment status">
+          <section className={`stk-flow-dialog ${stkWaiting ? "waiting" : stkFailed ? "failed" : "paid"}`}>
+            {stkWaiting ? (
+              <>
+                <div className="stk-flow-visual" aria-hidden="true"><span className="stk-pulse-ring" /><Loader2 className="spin" size={40} /></div>
+                <div className="stk-flow-copy">
+                  <span className="stk-flow-kicker">M-Pesa request sent</span>
+                  <h2>Waiting for payment</h2>
+                  <p>Ask the customer to enter their M-Pesa PIN on the phone.</p>
+                </div>
+                <div className="stk-flow-summary">
+                  <div><span>Mobile</span><strong>{stkPhone}</strong></div>
+                  <div><span>Amount</span><strong>KES {formatAmount(Math.round(Number(stkAmount)))}</strong></div>
+                </div>
+                <div className="stk-flow-progress"><span /></div>
+                <small>{stkFlowError || "Checking payment automatically. This window updates as soon as M-Pesa responds."}</small>
+              </>
+            ) : stkVerified && stkPayment ? (
+              <>
+                <CheckCircle2 className="stk-flow-status-icon" size={62} />
+                <div className="stk-flow-copy"><span className="stk-flow-kicker">Complete</span><h2>Payment verified</h2><p>{result?.message}</p></div>
+                <div className="stk-flow-receipt">
+                  <div><span>Amount</span><strong>KES {formatAmount(stkPayment.amount)}</strong></div>
+                  <div><span>M-Pesa code</span><strong>{stkPayment.transactionCode}</strong></div>
+                </div>
+                <button className="primary" type="button" onClick={closeStkFlow}>Done</button>
+              </>
+            ) : stkPayment ? (
+              <>
+                <CheckCircle2 className="stk-flow-status-icon" size={62} />
+                <div className="stk-flow-copy"><span className="stk-flow-kicker">Payment received</span><h2>KES {formatAmount(stkPayment.amount)} paid</h2><p>Confirm this receipt here to complete the waiter check.</p></div>
+                {error && <div className="stk-flow-inline-error">{error}</div>}
+                <div className="stk-flow-receipt">
+                  <div><span>Customer</span><strong>{stkPayment.customerName ?? "M-Pesa customer"}</strong></div>
+                  <div><span>M-Pesa code</span><strong>{stkPayment.transactionCode}</strong></div>
+                  <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
+                  <div><span>Received</span><strong>{formatDate(stkPayment.paymentTime)}</strong></div>
+                </div>
+                <button className="primary" type="button" onClick={() => void verifySelectedPayment()} disabled={loading || stkPayment.verifiedStatus}>
+                  {loading && <Loader2 className="spin" size={17} />}
+                  {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
+                </button>
+                {!loading && <button type="button" onClick={closeStkFlow}>Not now</button>}
+              </>
+            ) : (
+              <>
+                <XCircle className="stk-flow-status-icon" size={62} />
+                <div className="stk-flow-copy">
+                  <span className="stk-flow-kicker">Request ended</span>
+                  <h2>{stkPrompt?.status === "CANCELLED" ? "Customer cancelled" : stkPrompt?.status === "TIMED_OUT" ? "Request timed out" : "Payment not completed"}</h2>
+                  <p>{stkPrompt?.message || stkFlowError}</p>
+                </div>
+                <button className="primary" type="button" onClick={closeStkFlow}>Try again</button>
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </>
   );
 }
@@ -1459,7 +1541,7 @@ export function App() {
         </nav>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <a className="topbar-download" href={desktopDownloadUrl} download>
-            <Download size={13} />
+            <WindowsMark />
             Windows App
           </a>
           <div className="user-avatar" title={auth.user.fullName}>{initials(auth.user.fullName)}</div>

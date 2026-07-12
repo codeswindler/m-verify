@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "debug", "release")]
+  [ValidateSet("all", "debug", "release", "bundle")]
   [string]$Mode = "all"
 )
 
@@ -19,5 +19,11 @@ if ($Mode -eq "debug" -or $Mode -eq "all") {
 if ($Mode -eq "release" -or $Mode -eq "all") {
   Push-Location android
   ./gradlew assembleRelease
+  Pop-Location
+}
+
+if ($Mode -eq "bundle" -or $Mode -eq "all") {
+  Push-Location android
+  ./gradlew bundleRelease
   Pop-Location
 }
