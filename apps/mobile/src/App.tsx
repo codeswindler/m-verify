@@ -1552,11 +1552,10 @@ export function App() {
     };
   }, [auth?.accessToken, auth?.refreshToken, auth?.accessTokenExpiresAt]);
 
-  const refreshManagerData = useCallback(async () => {
+  const refreshManagerData = useCallback(async (background = false) => {
     if (!auth || auth.user.role !== "manager") return;
     if (!auth.user.permissions.dashboard && !auth.user.permissions.transactions) return;
-    setDataStatus("loading");
-    setDataError("");
+    if (!background) setDataStatus("loading");
     try {
       const [nextDashboard, nextPayments] = await Promise.all([
         auth.user.permissions.dashboard ? api.businessDashboard(auth.accessToken) : Promise.resolve(null),
@@ -1564,6 +1563,7 @@ export function App() {
       ]);
       setDashboard(nextDashboard);
       setPayments(nextPayments);
+      setDataError("");
       setDataStatus("ready");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Could not load business data");
@@ -1602,9 +1602,19 @@ export function App() {
   }, [auth]);
 
   useEffect(() => {
-    if (!booting && auth?.user.role === "manager" && (auth.user.permissions.dashboard || auth.user.permissions.transactions)) {
-      void refreshManagerData();
-    }
+    if (booting || auth?.user.role !== "manager" || (!auth.user.permissions.dashboard && !auth.user.permissions.transactions)) return;
+    void refreshManagerData();
+    const refresh = () => {
+      if (!document.hidden) void refreshManagerData(true);
+    };
+    const timer = window.setInterval(refresh, 7000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [auth?.accessToken, auth?.user.role, auth?.user.permissions.dashboard, auth?.user.permissions.transactions, booting, refreshManagerData]);
 
   useEffect(() => {

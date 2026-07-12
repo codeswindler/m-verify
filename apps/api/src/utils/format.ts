@@ -71,7 +71,10 @@ export function parseDarajaTime(value: string | number | undefined): string | nu
   const minute = Number(text.slice(10, 12));
   const second = Number(text.slice(12, 14));
 
-  return toMysqlDate(new Date(Date.UTC(year, month, day, hour, minute, second)));
+  // Daraja sends this compact timestamp as Kenya wall-clock time without an
+  // offset. Store UTC consistently so every client can render it correctly.
+  const kenyaOffsetMs = 3 * 60 * 60 * 1000;
+  return toMysqlDate(new Date(Date.UTC(year, month, day, hour, minute, second) - kenyaOffsetMs));
 }
 
 export function toSafeUser(row: RowDataPacket & Record<string, unknown>): SafeUser {

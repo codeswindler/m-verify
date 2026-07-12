@@ -274,25 +274,38 @@ function PlatformDashboardView({ token }: { token: string }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError("");
+  async function load(background = false) {
+    if (!background) setLoading(true);
     try {
       setDashboard(await api.platformDashboard(token));
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load dashboard");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    const refresh = () => {
+      if (!document.hidden) void load(true);
+    };
+    const timer = window.setInterval(refresh, 7000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [token]);
 
   return (
     <>
       <div className="section-header">
         <h2>Platform Dashboard</h2>
-        <button onClick={load} disabled={loading}><RefreshCw size={14} /> Refresh</button>
+        <button onClick={() => void load()} disabled={loading}><RefreshCw size={14} /> Refresh</button>
       </div>
       {error && <div className="error">{error}</div>}
       <div className="kpi-grid">
@@ -337,19 +350,32 @@ function BusinessDashboardView({ token }: { token: string }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError("");
+  async function load(background = false) {
+    if (!background) setLoading(true);
     try {
       setDashboard(await api.businessDashboard(token));
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load dashboard");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    const refresh = () => {
+      if (!document.hidden) void load(true);
+    };
+    const timer = window.setInterval(refresh, 7000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [token]);
 
   return (
     <>
@@ -358,7 +384,7 @@ function BusinessDashboardView({ token }: { token: string }) {
           <h2>Business Dashboard</h2>
           <p className="subtext">Business activity overview</p>
         </div>
-        <button onClick={load} disabled={loading}><RefreshCw size={14} /> Refresh</button>
+        <button onClick={() => void load()} disabled={loading}><RefreshCw size={14} /> Refresh</button>
       </div>
       {error && <div className="error">{error}</div>}
       <div className="kpi-grid dashboard-kpis">

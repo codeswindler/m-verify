@@ -39,7 +39,7 @@ describe("format utilities", () => {
   });
 
   it("parses Daraja timestamps", () => {
-    expect(parseDarajaTime("20260703140520")).toBe("2026-07-03 14:05:20");
+    expect(parseDarajaTime("20260703140520")).toBe("2026-07-03 11:05:20");
   });
 
   it("escapes CSV values", () => {

@@ -649,21 +649,32 @@ function DashboardView({ token }: { token: string }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError("");
+  async function load(background = false) {
+    if (!background) setLoading(true);
     try {
       setDashboard(await api.businessDashboard(token));
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dashboard failed");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }
 
   useEffect(() => {
     void load();
-  }, []);
+    const refresh = () => {
+      if (!document.hidden) void load(true);
+    };
+    const timer = window.setInterval(refresh, 7000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [token]);
 
   return (
     <section className="view-stack">
