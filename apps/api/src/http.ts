@@ -44,6 +44,17 @@ export function errorHandler(error: unknown, _request: Request, response: Respon
     return;
   }
 
+  if (error && typeof error === "object" && "code" in error) {
+    const code = String((error as { code?: unknown }).code);
+    if (code === "ER_NO_SUCH_TABLE" || code === "ER_BAD_FIELD_ERROR") {
+      response.status(500).json({
+        error: "DATABASE_MIGRATION_REQUIRED",
+        message: "Database migration is required before this feature can be used."
+      });
+      return;
+    }
+  }
+
   const message = error instanceof Error ? error.message : "Unexpected error";
   response.status(500).json({
     error: "INTERNAL_ERROR",
