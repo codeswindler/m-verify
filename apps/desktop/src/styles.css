@@ -475,6 +475,7 @@ input:focus {
 
 .receipt-dialog {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(100%, 350px);
   max-height: calc(100vh - 16px);
   gap: 8px;
@@ -512,8 +513,11 @@ input:focus {
 }
 
 .receipt-preview {
+  min-width: 0;
   min-height: 120px;
+  max-height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid #dbe4de;
   border-radius: 6px;
   background: #eaf1ed;

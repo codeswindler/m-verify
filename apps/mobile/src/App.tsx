@@ -666,11 +666,17 @@ function VerifyScreen({
     }
   }
 
+  const activeStkPromptId = stkPrompt && ["REQUESTED", "PENDING"].includes(stkPrompt.status) ? stkPrompt.id : null;
+
   useEffect(() => {
-    if (!stkPrompt || !["REQUESTED", "PENDING"].includes(stkPrompt.status)) return;
-    const timer = window.setInterval(async () => {
+    if (!activeStkPromptId) return;
+    let cancelled = false;
+    let timer = 0;
+
+    const poll = async () => {
       try {
-        const response = await api.getStkPrompt(token, stkPrompt.id);
+        const response = await api.getStkPrompt(token, activeStkPromptId);
+        if (cancelled) return;
         setStkFlowError("");
         setStkPrompt(response);
         if (response.payment) {
@@ -680,11 +686,19 @@ function VerifyScreen({
           setResult(null);
         }
       } catch (pollError) {
+        if (cancelled) return;
         setStkFlowError(pollError instanceof Error ? `${pollError.message} Retrying...` : "Connection interrupted. Retrying...");
+      } finally {
+        if (!cancelled) timer = window.setTimeout(poll, 3000);
       }
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [stkPrompt, token]);
+    };
+
+    timer = window.setTimeout(poll, 3000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeStkPromptId, token]);
 
   async function sendStkPrompt() {
     const amountValue = Math.round(Number(stkAmount));

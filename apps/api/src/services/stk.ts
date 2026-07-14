@@ -128,10 +128,21 @@ function stkQueryUrl(environment: "sandbox" | "production"): string {
 }
 
 function timestamp(): string {
-  const date = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}${value("month")}${value("day")}${value("hour")}${value("minute")}${value("second")}`;
 }
+
+const deferredProviderTimeoutCodes = new Set(["1037"]);
 
 async function readDarajaJson(response: Response): Promise<DarajaJson> {
   const text = await response.text();
@@ -320,8 +331,8 @@ async function queryDarajaStatus(row: StkRequestRow): Promise<void> {
   });
   const body = await readDarajaJson(response);
   const resultCode = body.ResultCode === undefined ? null : String(body.ResultCode);
-  if (resultCode && resultCode !== "0") {
-    const status: StkPromptStatus = ["1032", "1"].includes(resultCode) ? "CANCELLED" : "FAILED";
+  if (resultCode && resultCode !== "0" && !deferredProviderTimeoutCodes.has(resultCode)) {
+    const status: StkPromptStatus = resultCode === "1032" ? "CANCELLED" : "FAILED";
     await pool.execute(
       `UPDATE stk_prompt_requests
        SET status = ?, result_code = ?, result_description = ?, raw_result_json = ?, completed_at = UTC_TIMESTAMP()
@@ -334,14 +345,14 @@ async function queryDarajaStatus(row: StkRequestRow): Promise<void> {
 export async function getStkPrompt(id: number, auth: AuthContext): Promise<StkPromptResponse> {
   let row = await loadPrompt(id, auth);
   if (["PENDING", "REQUESTED"].includes(row.status)) {
-    if (new Date(row.expires_at).getTime() <= Date.now()) {
-      await pool.execute(
-        `UPDATE stk_prompt_requests
-         SET status = 'TIMED_OUT', result_description = 'Customer did not complete the M-Pesa prompt in time.', completed_at = UTC_TIMESTAMP()
-         WHERE id = ? AND status IN ('REQUESTED', 'PENDING')`,
-        [id]
-      );
-    } else {
+    await pool.execute(
+      `UPDATE stk_prompt_requests
+       SET status = 'TIMED_OUT', result_description = 'Customer did not complete the M-Pesa prompt in time.', completed_at = UTC_TIMESTAMP()
+       WHERE id = ? AND status IN ('REQUESTED', 'PENDING') AND expires_at <= UTC_TIMESTAMP()`,
+      [id]
+    );
+    row = await loadPrompt(id, auth);
+    if (["PENDING", "REQUESTED"].includes(row.status)) {
       await queryDarajaStatus(row).catch(() => undefined);
     }
     row = await loadPrompt(id, auth);
@@ -370,6 +381,15 @@ export async function handleStkCallback(body: StkCallbackBody): Promise<void> {
   if (!row) return;
 
   if (resultCode !== "0") {
+    if (deferredProviderTimeoutCodes.has(resultCode)) {
+      await pool.execute(
+        `UPDATE stk_prompt_requests
+         SET result_code = ?, result_description = ?, raw_result_json = ?
+         WHERE id = ? AND status IN ('REQUESTED', 'PENDING')`,
+        [resultCode, resultDesc, JSON.stringify(body), row.id]
+      );
+      return;
+    }
     const status: StkPromptStatus = resultCode === "1032" ? "CANCELLED" : "FAILED";
     await pool.execute(
       `UPDATE stk_prompt_requests
