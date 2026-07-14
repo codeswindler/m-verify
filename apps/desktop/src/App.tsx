@@ -10,6 +10,7 @@ import {
   Minus,
   Pin,
   PinOff,
+  Printer,
   ReceiptText,
   RefreshCw,
   Search,
@@ -18,8 +19,8 @@ import {
   Users,
   XCircle
 } from "lucide-react";
-import { accessTokenRefreshDelay, withAccessTokenExpiry } from "@m-verify/shared";
-import type { AuthResponse, PaymentSummary, StkPromptResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
+import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
+import type { AuthResponse, PaymentReceipt, PaymentSummary, StkPromptResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
 import {
   api,
   API_BASE_URL,
@@ -268,10 +269,49 @@ function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; upd
   );
 }
 
+function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSummary; token: string; onClose: () => void }) {
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getPaymentReceipt(token, payment.id)
+      .then((next) => {
+        if (!cancelled) setReceipt(next);
+      })
+      .catch((receiptError) => {
+        if (!cancelled) setError(receiptError instanceof Error ? receiptError.message : "Could not load receipt");
+      });
+    return () => { cancelled = true; };
+  }, [payment.id, token]);
+
+  return (
+    <div className="receipt-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Verified payment receipt">
+      <section className="receipt-dialog">
+        <style>{paymentReceiptStyles}</style>
+        <div className="receipt-dialog-header">
+          <div><span>Verified payment</span><strong>Receipt</strong></div>
+          <button className="small-button" type="button" onClick={onClose} aria-label="Close receipt"><XCircle size={16} /></button>
+        </div>
+        <div className="receipt-preview">
+          {!receipt && !error && <div className="empty-state">Preparing receipt...</div>}
+          {error && <div className="error">{error}</div>}
+          {receipt && <div className="receipt-print-target" dangerouslySetInnerHTML={{ __html: buildPaymentReceiptMarkup(receipt) }} />}
+        </div>
+        <div className="receipt-dialog-actions">
+          <button className="small-button" type="button" onClick={onClose}>Close</button>
+          <button className="primary" type="button" onClick={() => window.print()} disabled={!receipt}><Printer size={15} /> Print</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function VerifyView({ auth }: { auth: AuthResponse }) {
   const [query, setQuery] = useState("");
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -521,6 +561,11 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
         {loading && <Loader2 className="spin" size={16} />}
         {loading ? "Verifying" : selectedPayment?.verifiedStatus ? "Already verified" : "Verify selected payment"}
       </button>
+      {selectedPayment?.verifiedStatus && (
+        <button className="small-button receipt-action" type="button" onClick={() => setReceiptPayment(selectedPayment)}>
+          <Printer size={15} /> Print receipt
+        </button>
+      )}
 
       {error && <div className="error">{error}</div>}
       {result && (
@@ -542,6 +587,11 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
                 <dd>{result.payment.phoneNumber}</dd>
               </div>
             </dl>
+          )}
+          {result.payment?.verifiedStatus && (
+            <button className="small-button receipt-action" type="button" onClick={() => setReceiptPayment(result.payment!)}>
+              <Printer size={15} /> Print receipt
+            </button>
           )}
         </div>
       )}
@@ -579,6 +629,7 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
                   <div><span>Amount</span><strong>KES {formatAmount(stkPayment.amount)}</strong></div>
                   <div><span>M-Pesa code</span><strong>{stkPayment.transactionCode}</strong></div>
                 </div>
+                <button className="primary" type="button" onClick={() => setReceiptPayment(stkPayment)}><Printer size={15} /> Print receipt</button>
                 <button className="primary" type="button" onClick={closeStkFlow}>Done</button>
               </>
             ) : stkPayment ? (
@@ -616,6 +667,7 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
           </section>
         </div>
       )}
+      {receiptPayment && <PaymentReceiptDialog payment={receiptPayment} token={auth.accessToken} onClose={() => setReceiptPayment(null)} />}
     </section>
   );
 }
@@ -629,7 +681,7 @@ function KpiCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PaymentRow({ payment }: { payment: PaymentSummary }) {
+function PaymentRow({ payment, onReceipt }: { payment: PaymentSummary; onReceipt?: (payment: PaymentSummary) => void }) {
   return (
     <div className="list-row">
       <div>
@@ -639,6 +691,11 @@ function PaymentRow({ payment }: { payment: PaymentSummary }) {
       <div className="list-row-right">
         <span>{payment.verifiedStatus ? "Verified" : "Received"}</span>
         <small>{formatDate(payment.paymentTime)}</small>
+        {payment.verifiedStatus && onReceipt && (
+          <button className="receipt-row-button" type="button" onClick={() => onReceipt(payment)} title="Print receipt">
+            <Printer size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -710,6 +767,7 @@ function PaymentsView({ token }: { token: string }) {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
 
   async function load() {
     setLoading(true);
@@ -740,8 +798,9 @@ function PaymentsView({ token }: { token: string }) {
       </div>
       {error && <div className="error">{error}</div>}
       <div className="panel-list">
-        {payments.length ? payments.map((payment) => <PaymentRow key={payment.id} payment={payment} />) : <div className="empty-state">No payments found.</div>}
+        {payments.length ? payments.map((payment) => <PaymentRow key={payment.id} payment={payment} onReceipt={setReceiptPayment} />) : <div className="empty-state">No payments found.</div>}
       </div>
+      {receiptPayment && <PaymentReceiptDialog payment={receiptPayment} token={token} onClose={() => setReceiptPayment(null)} />}
     </section>
   );
 }

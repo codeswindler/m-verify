@@ -86,6 +86,13 @@ export type PaymentSummary = {
   verifiedAt: string | null;
 };
 
+export type PaymentReceipt = {
+  receiptNumber: string;
+  issuedAt: string;
+  businessName: string;
+  payment: PaymentSummary;
+};
+
 export type TenantSummary = {
   id: number;
   name: string;
@@ -268,3 +275,5 @@ export const darajaConfirmationSchema = z.object({
   MiddleName: z.string().trim().max(80).optional(),
   LastName: z.string().trim().max(80).optional()
 });
+
+export * from "./receipt.js";

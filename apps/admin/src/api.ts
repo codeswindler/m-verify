@@ -3,6 +3,7 @@ import type {
   MpesaCredentialSummary,
   PaginatedResponse,
   PaymentLookupResponse,
+  PaymentReceipt,
   PaymentSummary,
   SafeUser,
   StkPromptResponse,
@@ -168,6 +169,9 @@ export const api = {
   },
   listTransactions(token: string, params: URLSearchParams) {
     return request<PaginatedResponse<PaymentSummary>>(`/transactions?${params.toString()}`, { token });
+  },
+  getPaymentReceipt(token: string, paymentId: number) {
+    return request<PaymentReceipt>(`/transactions/${paymentId}/receipt`, { token });
   },
   listLogs(token: string, params: URLSearchParams) {
     return request<PaginatedResponse<VerificationLog>>(`/verification-logs?${params.toString()}`, { token });

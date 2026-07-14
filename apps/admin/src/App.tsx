@@ -8,6 +8,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Printer,
   ReceiptText,
   RefreshCw,
   Save,
@@ -23,6 +24,7 @@ import type {
   AuthResponse,
   MpesaCredentialSummary,
   PaginatedResponse,
+  PaymentReceipt,
   PaymentSummary,
   StkPromptResponse,
   TenantSummary,
@@ -30,7 +32,7 @@ import type {
   UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
-import { accessTokenRefreshDelay, defaultPermissionsForRole, withAccessTokenExpiry } from "@m-verify/shared";
+import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, defaultPermissionsForRole, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
 import {
   api,
   downloadCsv,
@@ -918,7 +920,55 @@ function EmptyRow({ label }: { label: string }) {
   return <tr><td colSpan={99}><div className="empty-state"><p>{label}</p></div></td></tr>;
 }
 
-function PaymentDetailModal({ payment, onClose }: { payment: PaymentSummary; onClose: () => void }) {
+function PaymentReceiptModal({ payment, token, onClose }: { payment: PaymentSummary; token: string; onClose: () => void }) {
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getPaymentReceipt(token, payment.id)
+      .then((next) => {
+        if (!cancelled) setReceipt(next);
+      })
+      .catch((receiptError) => {
+        if (!cancelled) setError(receiptError instanceof Error ? receiptError.message : "Could not load receipt");
+      });
+    return () => { cancelled = true; };
+  }, [payment.id, token]);
+
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop receipt-modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="modal-panel receipt-modal-panel" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
+        <style>{paymentReceiptStyles}</style>
+        <div className="modal-header receipt-modal-header">
+          <div><span className="section-badge">Verified payment</span><h2 id="receipt-title">Payment receipt</h2></div>
+          <button className="icon-only" type="button" onClick={onClose} aria-label="Close receipt"><X size={16} /></button>
+        </div>
+        <div className="receipt-preview">
+          {!receipt && !error && <div className="empty-state">Preparing receipt...</div>}
+          {error && <div className="error">{error}</div>}
+          {receipt && <div className="receipt-print-target" dangerouslySetInnerHTML={{ __html: buildPaymentReceiptMarkup(receipt) }} />}
+        </div>
+        <div className="modal-footer receipt-modal-actions">
+          <button type="button" onClick={onClose}>Close</button>
+          <button className="primary" type="button" onClick={() => window.print()} disabled={!receipt}><Printer size={15} /> Print receipt</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PaymentDetailModal({ payment, onClose, onReceipt }: { payment: PaymentSummary; onClose: () => void; onReceipt: (payment: PaymentSummary) => void }) {
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -959,6 +1009,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: PaymentSummary; onC
         </dl>
 
         <div className="modal-footer">
+          {payment.verifiedStatus && <button className="primary" type="button" onClick={() => onReceipt(payment)}><Printer size={15} /> Receipt</button>}
           <button type="button" onClick={onClose}>Close</button>
         </div>
       </section>
@@ -970,6 +1021,7 @@ function TransactionsView({ token, notify }: { token: string; notify: Notify }) 
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<PaginatedResponse<PaymentSummary> | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const params = useMemo(() => {
@@ -1023,14 +1075,18 @@ function TransactionsView({ token, notify }: { token: string; notify: Notify }) 
                   <td><span className={payment.verifiedStatus ? "cell-success" : "cell-muted-s"}>{payment.verifiedStatus ? "Yes" : "No"}</span></td>
                   <td className="cell-muted">{formatDate(payment.paymentTime)}</td>
                   <td className="cell-muted">{payment.verifiedBy?.username ?? "-"}</td>
-                  <td className="actions"><button type="button" onClick={() => setSelectedPayment(payment)}><Eye size={13} /> View</button></td>
+                  <td className="actions">
+                    <button type="button" onClick={() => setSelectedPayment(payment)}><Eye size={13} /> View</button>
+                    {payment.verifiedStatus && <button type="button" onClick={() => setReceiptPayment(payment)}><Printer size={13} /> Receipt</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-      {selectedPayment && <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />}
+      {selectedPayment && <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} onReceipt={(payment) => { setSelectedPayment(null); setReceiptPayment(payment); }} />}
+      {receiptPayment && <PaymentReceiptModal payment={receiptPayment} token={token} onClose={() => setReceiptPayment(null)} />}
     </>
   );
 }
@@ -1039,6 +1095,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
   const [query, setQuery] = useState("");
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1261,6 +1318,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
                 <button className="primary" type="button" onClick={() => void verifySelectedPayment()} disabled={loading || selectedPayment.verifiedStatus}>
                   {loading ? "Verifying..." : selectedPayment.verifiedStatus ? "Already verified" : "Verify selected payment"}
                 </button>
+                {selectedPayment.verifiedStatus && <button type="button" onClick={() => setReceiptPayment(selectedPayment)}><Printer size={15} /> Print receipt</button>}
               </div>
             )}
           </div>
@@ -1271,6 +1329,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
             <StatusBadge value={result.result} />
             <strong>{result.message}</strong>
             {result.payment && <span>{result.payment.reference ?? result.payment.transactionCode} - KES {formatAmount(result.payment.amount)}</span>}
+            {result.payment?.verifiedStatus && <button type="button" onClick={() => setReceiptPayment(result.payment!)}><Printer size={15} /> Print receipt</button>}
           </div>
         )}
       </section>
@@ -1301,6 +1360,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
                   <div><span>Amount</span><strong>KES {formatAmount(stkPayment.amount)}</strong></div>
                   <div><span>M-Pesa code</span><strong>{stkPayment.transactionCode}</strong></div>
                 </div>
+                <button className="primary" type="button" onClick={() => setReceiptPayment(stkPayment)}><Printer size={16} /> Print receipt</button>
                 <button className="primary" type="button" onClick={closeStkFlow}>Done</button>
               </>
             ) : stkPayment ? (
@@ -1334,6 +1394,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
           </section>
         </div>
       )}
+      {receiptPayment && <PaymentReceiptModal payment={receiptPayment} token={token} onClose={() => setReceiptPayment(null)} />}
     </>
   );
 }

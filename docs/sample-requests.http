@@ -70,6 +70,10 @@ Authorization: Bearer {{accessToken}}
 GET {{baseUrl}}/transactions/1
 Authorization: Bearer {{accessToken}}
 
+### Verified payment receipt
+GET {{baseUrl}}/transactions/1/receipt
+Authorization: Bearer {{accessToken}}
+
 ### Verification logs
 GET {{baseUrl}}/verification-logs?page=1&limit=25
 Authorization: Bearer {{accessToken}}

@@ -160,6 +160,15 @@ The verifier searches received payments by M-Pesa transaction code, amount, or c
 - `ALREADY_VERIFIED`
 - `ERROR`
 
+## Payment receipts
+
+Verified payments have a deterministic M-Verify receipt number and can be printed immediately after verification or reopened from transaction/payment history. The receipt preserves the full customer-paid M-Pesa amount; business commission calculations only affect dashboard settlement totals.
+
+- Web uses the browser print dialog.
+- Windows uses the WebView2/Windows print dialog.
+- Android uses the native print service, including configured printers and Save as PDF.
+- `GET /transactions/:id/receipt` returns the canonical receipt data and rejects unverified or unauthorized payments.
+
 ## Daraja C2B
 
 Platform admins can create businesses in the admin panel and save each business's M-Pesa payment method, shortcode, Daraja credentials, and active status. Choose **Paybill** when the business receives payments through a paybill number. Choose **Till number** when the business receives Buy Goods payments; enter the store/head-office shortcode used by Daraja, and optionally store the customer-facing till number if Safaricom/bank onboarding issued both.

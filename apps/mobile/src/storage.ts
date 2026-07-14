@@ -1,11 +1,11 @@
-import { withAccessTokenExpiry, type AuthResponse } from "@m-verify/shared";
+import { defaultPermissionsForRole, withAccessTokenExpiry, type AuthResponse, type UserRole } from "@m-verify/shared";
 
 const sessionKey = "mverify_mobile_auth";
 const deviceKey = "mverify_mobile_device_id";
 
 function randomId() {
-  if ("randomUUID" in crypto) {
-    return crypto.randomUUID();
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
   }
   return `mobile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -20,7 +20,32 @@ export function getDeviceId() {
 
 export async function loadSession() {
   const raw = localStorage.getItem(sessionKey);
-  return raw ? (JSON.parse(raw) as AuthResponse) : null;
+  if (!raw) return null;
+
+  try {
+    const stored = JSON.parse(raw) as Partial<AuthResponse>;
+    if (!stored.accessToken || !stored.refreshToken || !stored.user || typeof stored.user !== "object") {
+      localStorage.removeItem(sessionKey);
+      return null;
+    }
+    const role = stored.user.role as UserRole;
+    if (!(["admin", "manager", "waiter"] as UserRole[]).includes(role)) {
+      localStorage.removeItem(sessionKey);
+      return null;
+    }
+    const session = stored as AuthResponse;
+    session.user.permissions = {
+      ...defaultPermissionsForRole(role),
+      ...(session.user.permissions ?? {})
+    };
+    if (!session.accessTokenExpiresAt) {
+      session.accessTokenExpiresAt = Date.now() + Math.max(60, Number(session.expiresIn) || 300) * 1000;
+    }
+    return session;
+  } catch {
+    localStorage.removeItem(sessionKey);
+    return null;
+  }
 }
 
 export async function saveSession(auth: AuthResponse) {

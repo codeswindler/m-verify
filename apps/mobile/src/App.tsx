@@ -15,6 +15,7 @@ import {
   Lock,
   LogOut,
   Minus,
+  Printer,
   ReceiptText,
   RefreshCw,
   Search,
@@ -25,7 +26,7 @@ import {
   WalletCards,
   XCircle
 } from "lucide-react";
-import { accessTokenRefreshDelay, defaultPermissionsForRole, type AuthResponse, type PaymentSummary, type StkPromptResponse, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
+import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, defaultPermissionsForRole, paymentReceiptStyles, type AuthResponse, type PaymentReceipt, type PaymentSummary, type StkPromptResponse, type UserModule, type UserPermissions, type VerificationResponse, type VerificationStatus } from "@m-verify/shared";
 import {
   api,
   isAuthenticationError,
@@ -47,6 +48,7 @@ import {
   type DatePreset
 } from "./format";
 import { clearSession, getDeviceId, loadSession, saveSession } from "./storage";
+import { printPaymentReceipt } from "./receipt";
 
 type ApiStatus = "idle" | "loading" | "ready" | "error";
 type AppTab = "verify" | "home" | "insights" | "summary" | "staff" | "sales";
@@ -457,7 +459,62 @@ function BottomNav({ tab, role, permissions, onChange }: { tab: AppTab; role: St
   );
 }
 
-function PaymentCard({ payment, compact = false }: { payment: PaymentSummary; compact?: boolean }) {
+function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSummary; token: string; onClose: () => void }) {
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+  const [error, setError] = useState("");
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getPaymentReceipt(token, payment.id)
+      .then((next) => {
+        if (!cancelled) setReceipt(next);
+      })
+      .catch((receiptError) => {
+        if (!cancelled) setError(receiptError instanceof Error ? receiptError.message : "Could not load receipt");
+      });
+    return () => { cancelled = true; };
+  }, [payment.id, token]);
+
+  async function printReceipt() {
+    if (!receipt) return;
+    setPrinting(true);
+    setError("");
+    try {
+      await printPaymentReceipt(receipt);
+    } catch (printError) {
+      setError(printError instanceof Error ? printError.message : "Could not open Android printing");
+    } finally {
+      setPrinting(false);
+    }
+  }
+
+  return (
+    <div className="receipt-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Verified payment receipt">
+      <section className="receipt-dialog">
+        <style>{paymentReceiptStyles}</style>
+        <div className="receipt-dialog-header">
+          <div><p className="eyebrow">Verified payment</p><h2>Receipt</h2></div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close receipt"><XCircle size={20} /></button>
+        </div>
+        <div className="receipt-preview">
+          {!receipt && !error ? <EmptyState text="Preparing receipt..." /> : null}
+          {error ? <div className="inline-error"><AlertTriangle size={16} /><span>{error}</span></div> : null}
+          {receipt ? <div className="receipt-print-target" dangerouslySetInnerHTML={{ __html: buildPaymentReceiptMarkup(receipt) }} /> : null}
+        </div>
+        <div className="receipt-dialog-actions">
+          <button className="secondary-action" type="button" onClick={onClose}>Close</button>
+          <button className="primary-button" type="button" onClick={() => void printReceipt()} disabled={!receipt || printing}>
+            {printing ? <Loader2 className="spin" size={18} /> : <Printer size={18} />}
+            {printing ? "Opening print" : "Print receipt"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PaymentCard({ payment, compact = false, onReceipt }: { payment: PaymentSummary; compact?: boolean; onReceipt?: (payment: PaymentSummary) => void }) {
   return (
     <article className={compact ? "payment-card compact" : "payment-card"}>
       <div className="payment-symbol">
@@ -474,25 +531,26 @@ function PaymentCard({ payment, compact = false }: { payment: PaymentSummary; co
           <span>{dateTime(payment.paymentTime)}</span>
         </div>
       </div>
-      <span className={payment.verifiedStatus ? "status-pill verified" : "status-pill pending"}>
-        {payment.verifiedStatus ? "Verified" : "Open"}
-      </span>
+      <div className="payment-card-actions">
+        <span className={payment.verifiedStatus ? "status-pill verified" : "status-pill pending"}>{payment.verifiedStatus ? "Verified" : "Open"}</span>
+        {payment.verifiedStatus && onReceipt ? <button type="button" onClick={() => onReceipt(payment)} aria-label={`Print receipt for ${paymentName(payment)}`}><Printer size={16} /></button> : null}
+      </div>
     </article>
   );
 }
 
-function PaymentList({ items, emptyText, compact = false }: { items: PaymentSummary[]; emptyText: string; compact?: boolean }) {
+function PaymentList({ items, emptyText, compact = false, onReceipt }: { items: PaymentSummary[]; emptyText: string; compact?: boolean; onReceipt?: (payment: PaymentSummary) => void }) {
   if (!items.length) return <EmptyState text={emptyText} />;
   return (
     <div className="payment-list">
       {items.map((payment) => (
-        <PaymentCard compact={compact} key={payment.id} payment={payment} />
+        <PaymentCard compact={compact} key={payment.id} payment={payment} onReceipt={onReceipt} />
       ))}
     </div>
   );
 }
 
-function VerifiedSaleCard({ payment }: { payment: PaymentSummary }) {
+function VerifiedSaleCard({ payment, onReceipt }: { payment: PaymentSummary; onReceipt?: (payment: PaymentSummary) => void }) {
   return (
     <article className="payment-card compact">
       <div className="payment-symbol">
@@ -508,17 +566,20 @@ function VerifiedSaleCard({ payment }: { payment: PaymentSummary }) {
           <span>Verified {dateTime(payment.verifiedAt ?? payment.paymentTime)}</span>
         </div>
       </div>
-      <span className="status-pill verified">Sold</span>
+      <div className="payment-card-actions">
+        <span className="status-pill verified">Sold</span>
+        {onReceipt ? <button type="button" onClick={() => onReceipt(payment)} aria-label={`Print receipt for ${paymentName(payment)}`}><Printer size={16} /></button> : null}
+      </div>
     </article>
   );
 }
 
-function VerifiedSalesList({ items, emptyText }: { items: PaymentSummary[]; emptyText: string }) {
+function VerifiedSalesList({ items, emptyText, onReceipt }: { items: PaymentSummary[]; emptyText: string; onReceipt?: (payment: PaymentSummary) => void }) {
   if (!items.length) return <EmptyState text={emptyText} />;
   return (
     <div className="payment-list">
       {items.map((payment) => (
-        <VerifiedSaleCard key={payment.id} payment={payment} />
+        <VerifiedSaleCard key={payment.id} payment={payment} onReceipt={onReceipt} />
       ))}
     </div>
   );
@@ -526,10 +587,12 @@ function VerifiedSalesList({ items, emptyText }: { items: PaymentSummary[]; empt
 
 function VerifyScreen({
   token,
-  onVerified
+  onVerified,
+  onReceipt
 }: {
   token: string;
   onVerified?: (payment: PaymentSummary) => void;
+  onReceipt: (payment: PaymentSummary) => void;
 }) {
   const [query, setQuery] = useState("");
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
@@ -784,6 +847,9 @@ function VerifyScreen({
         {verifying ? <Loader2 className="spin" size={19} /> : <ShieldCheck size={19} />}
         {verifying ? "Verifying" : selectedPayment?.verifiedStatus ? "Already verified" : "Verify selected payment"}
       </button>
+      {selectedPayment?.verifiedStatus ? (
+        <button className="secondary-action" type="button" onClick={() => onReceipt(selectedPayment)}><Printer size={18} /> Print receipt</button>
+      ) : null}
 
       {error ? (
         <div className="inline-error">
@@ -799,6 +865,7 @@ function VerifyScreen({
             <strong>{result.result.replace(/_/g, " ")}</strong>
             <span>{result.message}</span>
           </div>
+          {result.payment?.verifiedStatus ? <button type="button" onClick={() => onReceipt(result.payment!)} aria-label="Print verified payment receipt"><Printer size={18} /></button> : null}
         </section>
       ) : null}
 
@@ -828,6 +895,7 @@ function VerifyScreen({
                   <div><span>Amount</span><strong>{money(stkPayment.amount)}</strong></div>
                   <div><span>M-Pesa code</span><strong>{stkPayment.transactionCode}</strong></div>
                 </div>
+                <button className="primary-button" type="button" onClick={() => onReceipt(stkPayment)}><Printer size={18} /> Print receipt</button>
                 <button className="primary-button" type="button" onClick={closeStkFlow}>Done</button>
               </>
             ) : stkPayment ? (
@@ -871,7 +939,8 @@ function HomeScreen({
   status,
   error,
   onRefresh,
-  onTabChange
+  onTabChange,
+  onReceipt
 }: {
   dashboard: BusinessDashboard | null;
   analytics: Analytics;
@@ -879,6 +948,7 @@ function HomeScreen({
   error: string;
   onRefresh: () => void;
   onTabChange: (tab: AppTab) => void;
+  onReceipt: (payment: PaymentSummary) => void;
 }) {
   const recentPayments = dashboard?.recentPayments.length ? dashboard.recentPayments : analytics.filteredPayments.slice(0, 5);
   const todayCollections = Number(dashboard?.kpis.todayPaymentVolume ?? analytics.todayTotal);
@@ -952,7 +1022,7 @@ function HomeScreen({
           </div>
           <ReceiptText size={20} />
         </div>
-        <PaymentList compact emptyText="No payments received yet." items={recentPayments} />
+        <PaymentList compact emptyText="No payments received yet." items={recentPayments} onReceipt={onReceipt} />
       </section>
     </section>
   );
@@ -1085,7 +1155,7 @@ function InsightsScreen({ payments, settlementRate }: { payments: PaymentSummary
   );
 }
 
-function SummaryScreen({ payments, settlementRate }: { payments: PaymentSummary[]; settlementRate: number }) {
+function SummaryScreen({ payments, settlementRate, onReceipt }: { payments: PaymentSummary[]; settlementRate: number; onReceipt: (payment: PaymentSummary) => void }) {
   const [anchor, setAnchor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => inputDate(new Date()));
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -1184,7 +1254,7 @@ function SummaryScreen({ payments, settlementRate }: { payments: PaymentSummary[
           </div>
           <span className="count-badge">{selectedPoint?.count ?? 0} payments</span>
         </div>
-        <PaymentList compact emptyText="No payments on this date." items={selectedPayments} />
+        <PaymentList compact emptyText="No payments on this date." items={selectedPayments} onReceipt={onReceipt} />
       </section>
     </section>
   );
@@ -1194,12 +1264,14 @@ function StaffSalesScreen({
   payments,
   status,
   error,
-  onRefresh
+  onRefresh,
+  onReceipt
 }: {
   payments: PaymentSummary[];
   status: ApiStatus;
   error: string;
   onRefresh: () => void;
+  onReceipt: (payment: PaymentSummary) => void;
 }) {
   const [preset, setPreset] = useState<DatePreset>("today");
   const analytics = useMemo(() => buildAnalytics(payments, preset, "verified"), [payments, preset]);
@@ -1270,7 +1342,7 @@ function StaffSalesScreen({
           </div>
           <span className="count-badge">{analytics.count} sales</span>
         </div>
-        <VerifiedSalesList emptyText="No verified sales in this filter." items={analytics.filteredPayments} />
+        <VerifiedSalesList emptyText="No verified sales in this filter." items={analytics.filteredPayments} onReceipt={onReceipt} />
       </section>
     </section>
   );
@@ -1501,6 +1573,7 @@ export function App() {
   const [salesPayments, setSalesPayments] = useState<PaymentSummary[]>([]);
   const [salesStatus, setSalesStatus] = useState<ApiStatus>("idle");
   const [salesError, setSalesError] = useState("");
+  const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1656,6 +1729,7 @@ export function App() {
     setPayments([]);
     setUsers([]);
     setSalesPayments([]);
+    setReceiptPayment(null);
     setTab("verify");
     await clearSession();
     if (current) {
@@ -1721,15 +1795,16 @@ export function App() {
             error={dataError}
             onRefresh={() => void refreshManagerData()}
             onTabChange={setTab}
+            onReceipt={setReceiptPayment}
             status={dataStatus}
           />
         ) : null}
 
         {auth.user.permissions.verify && tab === "verify" ? (
-          <VerifyScreen token={auth.accessToken} onVerified={isManager ? updateVerifiedPayment : isWaiter ? updateWaiterSale : undefined} />
+          <VerifyScreen token={auth.accessToken} onVerified={isManager ? updateVerifiedPayment : isWaiter ? updateWaiterSale : undefined} onReceipt={setReceiptPayment} />
         ) : null}
         {isManager && auth.user.permissions.transactions && tab === "insights" ? <InsightsScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
-        {isManager && auth.user.permissions.transactions && tab === "summary" ? <SummaryScreen payments={payments} settlementRate={managerSettlementRate} /> : null}
+        {isManager && auth.user.permissions.transactions && tab === "summary" ? <SummaryScreen payments={payments} settlementRate={managerSettlementRate} onReceipt={setReceiptPayment} /> : null}
         {isManager && auth.user.permissions.staff && tab === "staff" ? (
           <StaffScreen
             currentUserId={auth.user.id}
@@ -1744,6 +1819,7 @@ export function App() {
           <StaffSalesScreen
             error={salesError}
             onRefresh={() => void refreshWaiterSales()}
+            onReceipt={setReceiptPayment}
             payments={salesPayments}
             status={salesStatus}
           />
@@ -1751,6 +1827,7 @@ export function App() {
       </main>
 
       {isManager || isWaiter ? <BottomNav onChange={setTab} permissions={auth.user.permissions} role={auth.user.role as StaffRole} tab={tab} /> : null}
+      {receiptPayment ? <PaymentReceiptDialog payment={receiptPayment} token={auth.accessToken} onClose={() => setReceiptPayment(null)} /> : null}
     </>
   );
 }

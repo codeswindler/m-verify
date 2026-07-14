@@ -1680,9 +1680,50 @@ tbody tr:hover td {
 
 .modal-footer {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   border-top: 1px solid var(--border-light);
   padding-top: 14px;
+}
+
+.receipt-modal-panel {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+}
+
+.receipt-preview {
+  overflow: auto;
+  border-radius: var(--r);
+  background: #eef4f0;
+  padding: 18px;
+}
+
+.receipt-print-target {
+  width: 100%;
+}
+
+.receipt-modal-actions .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-print-target,
+  .receipt-print-target * {
+    visibility: visible !important;
+  }
+
+  .receipt-print-target {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 80mm;
+    background: #fff;
+  }
 }
 
 .result-verified {

@@ -1,6 +1,7 @@
 import type {
   AuthResponse,
   PaginatedResponse,
+  PaymentReceipt,
   PaymentSummary,
   SafeUser,
   StkPromptResponse,
@@ -106,6 +107,9 @@ export const api = {
   },
   listTransactions(token: string, params: URLSearchParams) {
     return request<PaginatedResponse<PaymentSummary>>(`/transactions?${params.toString()}`, { token });
+  },
+  getPaymentReceipt(token: string, paymentId: number) {
+    return request<PaymentReceipt>(`/transactions/${paymentId}/receipt`, { token });
   },
   searchVerificationPayments(token: string, params: URLSearchParams) {
     return request<{ data: PaymentSummary[] }>(`/verify-payment/search?${params.toString()}`, { token });

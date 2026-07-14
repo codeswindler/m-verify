@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { listQuerySchema, paymentStatuses } from "@m-verify/shared";
-import type { PaymentStatus, PaymentSummary } from "@m-verify/shared";
+import type { PaymentReceipt, PaymentStatus, PaymentSummary } from "@m-verify/shared";
 import type { DbParam, RowDataPacket } from "../db.js";
 import { pool } from "../db.js";
 import { AppError, asyncHandler } from "../http.js";
@@ -193,6 +193,40 @@ transactionsRouter.get(
       limit: query.limit,
       total: Number(countRows[0]?.total ?? 0)
     });
+  })
+);
+
+transactionsRouter.get(
+  "/transactions/:id/receipt",
+  asyncHandler(async (request, response) => {
+    const { id } = idParamsSchema.parse(request.params);
+    const tenantClause = request.auth!.user.role === "admin" ? "" : " AND p.tenant_id = ?";
+    const waiterClause = request.auth!.user.role === "waiter" ? " AND p.verified_by = ?" : "";
+    const params: DbParam[] = [id];
+    if (request.auth!.user.role !== "admin") {
+      params.push(request.auth!.user.tenantId ?? -1);
+    }
+    if (request.auth!.user.role === "waiter") {
+      params.push(request.auth!.user.id);
+    }
+
+    const [rows] = await pool.execute<PaymentRow[]>(
+      `${paymentSelect} WHERE p.id = ? AND p.verified_status = TRUE${tenantClause}${waiterClause} LIMIT 1`,
+      params
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new AppError(404, "Verified payment receipt not found", "RECEIPT_NOT_FOUND");
+    }
+
+    const payment = mapPayment(row);
+    const receipt: PaymentReceipt = {
+      receiptNumber: `MVR-${String(payment.id).padStart(8, "0")}`,
+      issuedAt: payment.verifiedAt ?? payment.paymentTime ?? new Date().toISOString(),
+      businessName: payment.tenantName ?? "M-Verify business",
+      payment
+    };
+    response.json(receipt);
   })
 );
 

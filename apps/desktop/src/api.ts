@@ -1,4 +1,4 @@
-import type { AuthResponse, PaginatedResponse, PaymentSummary, SafeUser, StkPromptResponse, VerificationResponse } from "@m-verify/shared";
+import type { AuthResponse, PaginatedResponse, PaymentReceipt, PaymentSummary, SafeUser, StkPromptResponse, VerificationResponse } from "@m-verify/shared";
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
@@ -90,6 +90,9 @@ export const api = {
   },
   listTransactions(token: string, params: URLSearchParams) {
     return request<PaginatedResponse<PaymentSummary>>(`/transactions?${params.toString()}`, { token });
+  },
+  getPaymentReceipt(token: string, paymentId: number) {
+    return request<PaymentReceipt>(`/transactions/${paymentId}/receipt`, { token });
   },
   searchVerificationPayments(token: string, params: URLSearchParams) {
     return request<{ data: PaymentSummary[] }>(`/verify-payment/search?${params.toString()}`, { token });
