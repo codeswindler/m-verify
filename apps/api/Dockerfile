@@ -18,4 +18,4 @@ COPY --from=build /app/apps/api/dist apps/api/dist
 COPY database database
 RUN pnpm install --filter @m-verify/api... --prod --frozen-lockfile=false
 EXPOSE 4000
-CMD ["pnpm", "--filter", "@m-verify/api", "start"]
+CMD ["sh", "-c", "node apps/api/dist/scripts/migrate.js && pnpm --filter @m-verify/api start"]

@@ -1,53 +1,35 @@
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import mysql, { type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
+import mysql, { type RowDataPacket } from "mysql2/promise";
 import { config } from "../config.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(currentFile), "../../../..");
 const schemaPath = path.join(rootDir, "database", "schema.sql");
-const darajaTimeMigrationPath = path.join(rootDir, "database", "migrations", "006_correct_daraja_payment_times.sql");
+const migrationsDir = path.join(rootDir, "database", "migrations");
+const migrationLock = `mverify_schema_migrations_${config.db.database}`;
 
-const sql = await fs.readFile(schemaPath, "utf8");
 const connection = await mysql.createConnection({
   host: config.db.host,
   port: config.db.port,
+  database: config.db.database,
   user: config.db.user,
   password: config.db.password,
   multipleStatements: true
 });
 
-async function columnExists(tableName: string, columnName: string): Promise<boolean> {
-  const [columns] = await connection.query<RowDataPacket[]>(
-    `SELECT COLUMN_NAME
-     FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = ?
-       AND TABLE_NAME = ?
-       AND COLUMN_NAME = ?
-     LIMIT 1`,
-    [config.db.database, tableName, columnName]
+async function tableExists(tableName: string): Promise<boolean> {
+  const [rows] = await connection.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS table_count
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [tableName]
   );
-  return columns.length > 0;
+  return Number(rows[0]?.table_count ?? 0) > 0;
 }
 
-try {
-  await connection.query(sql);
-  await connection.changeUser({ database: config.db.database });
-  if (!(await columnExists("tenant_mpesa_credentials", "payment_method"))) {
-    await connection.query(
-      "ALTER TABLE tenant_mpesa_credentials ADD COLUMN payment_method ENUM('paybill', 'till') NOT NULL DEFAULT 'paybill' AFTER environment"
-    );
-    console.log("Added tenant_mpesa_credentials.payment_method.");
-  }
-  if (await columnExists("tenant_mpesa_credentials", "callback_secret_hash")) {
-    await connection.query("ALTER TABLE tenant_mpesa_credentials DROP COLUMN callback_secret_hash");
-    console.log("Dropped tenant_mpesa_credentials.callback_secret_hash.");
-  }
-  if (await columnExists("tenant_mpesa_credentials", "callback_secret_hint")) {
-    await connection.query("ALTER TABLE tenant_mpesa_credentials DROP COLUMN callback_secret_hint");
-    console.log("Dropped tenant_mpesa_credentials.callback_secret_hint.");
-  }
+async function ensureMigrationTable(): Promise<void> {
   await connection.query(
     `CREATE TABLE IF NOT EXISTS schema_migrations (
       name VARCHAR(160) NOT NULL,
@@ -55,20 +37,52 @@ try {
       PRIMARY KEY (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
   );
+}
 
-  const darajaTimeMigration = "006_correct_daraja_payment_times";
-  const [applied] = await connection.execute<RowDataPacket[]>(
+async function migrationApplied(name: string): Promise<boolean> {
+  const [rows] = await connection.execute<RowDataPacket[]>(
     "SELECT name FROM schema_migrations WHERE name = ? LIMIT 1",
-    [darajaTimeMigration]
+    [name]
   );
-  if (applied.length === 0) {
-    const migrationSql = await fs.readFile(darajaTimeMigrationPath, "utf8");
-    const [result] = await connection.query<ResultSetHeader[]>(migrationSql);
-    const correctedRows = result.reduce((total, item) => total + (item.affectedRows ?? 0), 0);
-    await connection.execute("INSERT INTO schema_migrations (name) VALUES (?)", [darajaTimeMigration]);
-    console.log(`Corrected ${correctedRows} historical Daraja payment timestamp(s).`);
+  return rows.length > 0;
+}
+
+async function markMigrationApplied(name: string): Promise<void> {
+  await connection.execute("INSERT IGNORE INTO schema_migrations (name) VALUES (?)", [name]);
+}
+
+let lockAcquired = false;
+try {
+  const [lockRows] = await connection.execute<RowDataPacket[]>("SELECT GET_LOCK(?, 30) AS acquired", [migrationLock]);
+  lockAcquired = Number(lockRows[0]?.acquired ?? 0) === 1;
+  if (!lockAcquired) throw new Error("Could not acquire the database migration lock");
+
+  if (!(await tableExists("tenants"))) {
+    await connection.query(await fs.readFile(schemaPath, "utf8"));
+    console.log("Applied the baseline database schema.");
   }
-  console.log("Database schema applied.");
+
+  await ensureMigrationTable();
+  await markMigrationApplied("001_schema");
+
+  const migrationFiles = (await fs.readdir(migrationsDir))
+    .filter((fileName) => /^\d+_.*\.sql$/.test(fileName) && fileName !== "001_schema.sql")
+    .sort((left, right) => left.localeCompare(right));
+
+  for (const fileName of migrationFiles) {
+    const migrationName = path.basename(fileName, ".sql");
+    if (await migrationApplied(migrationName)) continue;
+
+    const migrationSql = await fs.readFile(path.join(migrationsDir, fileName), "utf8");
+    await connection.query(migrationSql);
+    await markMigrationApplied(migrationName);
+    console.log(`Applied database migration ${migrationName}.`);
+  }
+
+  console.log("Database migrations are current.");
 } finally {
+  if (lockAcquired) {
+    await connection.execute("SELECT RELEASE_LOCK(?)", [migrationLock]);
+  }
   await connection.end();
 }

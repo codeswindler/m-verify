@@ -543,12 +543,20 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     setMessage("");
     try {
       const business = await api.createTenant(token, cleanBusinessPayload(businessForm) as CreateTenantPayload);
+      setBusinesses((current) => [...current.filter((item) => item.id !== business.id), business].sort((left, right) => left.name.localeCompare(right.name)));
+      setSelectedBusinessId(business.id);
       setBusinessForm(emptyBusinessForm());
       setShowCreateForm(false);
       setActivePanel("edit");
       setMessage("Business created.");
       notify("Business created", `${business.name} is ready for setup.`);
-      await loadBusinesses(business.id);
+      try {
+        await loadBusinesses(business.id);
+      } catch (refreshError) {
+        const refreshMessage = refreshError instanceof Error ? refreshError.message : "The business list could not refresh";
+        setError(`Business created, but the list could not refresh: ${refreshMessage}`);
+        notify("Business created", "Refresh the page to reload all business details.", "info");
+      }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Could not create business";
       setError(messageText);
@@ -652,12 +660,22 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
     setError("");
     setMessage("");
     try {
-      await api.createUser(token, { ...staffForm, tenantId: selectedBusiness.id });
+      const user = await api.createUser(token, { ...staffForm, tenantId: selectedBusiness.id });
+      setUsers((current) => [
+        ...current.filter((item) => item.id !== user.id),
+        { ...user, lastLoginAt: null, createdAt: new Date().toISOString() }
+      ]);
       setStaffForm({ username: "", fullName: "", role: "waiter", password: "", permissions: defaultPermissionsForRole("waiter") });
       setMessage("Business user created.");
       setShowStaffForm(false);
       notify("Business user created", staffForm.username);
-      await loadBusinesses(selectedBusiness.id);
+      try {
+        await loadBusinesses(selectedBusiness.id);
+      } catch (refreshError) {
+        const refreshMessage = refreshError instanceof Error ? refreshError.message : "The staff list could not refresh";
+        setError(`Staff member created, but the list could not refresh: ${refreshMessage}`);
+        notify("Staff member created", "Refresh the page to reload all staff details.", "info");
+      }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Could not create business user";
       setError(messageText);
@@ -747,10 +765,10 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
           <form className="user-form create-business-form" onSubmit={createBusiness}>
             <h2><Building2 size={16} /> Create business</h2>
             <div className="form-grid two">
-              <label>Name<input value={businessForm.name} onChange={(event) => setBusinessForm({ ...businessForm, name: event.target.value })} /></label>
-              <label>Slug<input value={businessForm.slug ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, slug: event.target.value })} /></label>
+              <label>Name<input required minLength={2} maxLength={160} value={businessForm.name} onChange={(event) => setBusinessForm({ ...businessForm, name: event.target.value })} /></label>
+              <label>Slug<input minLength={2} maxLength={80} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only" value={businessForm.slug ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, slug: event.target.value })} /></label>
               <label>Commission %<input type="number" min="0" max="100" step="0.01" value={businessForm.commissionRatePct ?? 0} onChange={(event) => setBusinessForm({ ...businessForm, commissionRatePct: Number(event.target.value) })} /></label>
-              <label>Email<input value={businessForm.contactEmail ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactEmail: event.target.value })} /></label>
+              <label>Email<input type="email" value={businessForm.contactEmail ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactEmail: event.target.value })} /></label>
               <label>Phone<input value={businessForm.contactPhone ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactPhone: event.target.value })} /></label>
             </div>
             <div className="actions"><button className="primary" disabled={loading}>Create business</button><button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button></div>
@@ -816,13 +834,13 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                 {showStaffForm && <form className="user-form" onSubmit={createBusinessUser}>
                   <h2><UserPlus size={16} /> Add staff</h2>
                   <div className="form-grid two">
-                    <label>Username<input value={staffForm.username} onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })} /></label>
-                    <label>Full name<input value={staffForm.fullName} onChange={(event) => setStaffForm({ ...staffForm, fullName: event.target.value })} /></label>
+                    <label>Username<input required minLength={2} maxLength={80} value={staffForm.username} onChange={(event) => setStaffForm({ ...staffForm, username: event.target.value })} /></label>
+                    <label>Full name<input required minLength={2} maxLength={120} value={staffForm.fullName} onChange={(event) => setStaffForm({ ...staffForm, fullName: event.target.value })} /></label>
                     <label>Role<select value={staffForm.role} onChange={(event) => {
                       const role = event.target.value as CreateUserPayload["role"];
                       setStaffForm({ ...staffForm, role, permissions: defaultPermissionsForRole(role) });
                     }}><option value="waiter">Waiter</option><option value="manager">Business Admin</option></select></label>
-                    <label>Temporary password<input type="password" value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} /></label>
+                    <label>Temporary password<input required minLength={8} maxLength={200} type="password" value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} /></label>
                   </div>
                   <div className="permission-grid">
                     {permissionLabels.map((permission) => (
@@ -1174,10 +1192,15 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
   }
 
   useEffect(() => {
-    if (!stkPrompt || !["REQUESTED", "PENDING"].includes(stkPrompt.status)) return;
-    const timer = window.setInterval(async () => {
+    const promptId = stkPrompt && ["REQUESTED", "PENDING"].includes(stkPrompt.status) ? stkPrompt.id : null;
+    if (!promptId) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
       try {
-        const prompt = await api.getStkPrompt(token, stkPrompt.id);
+        const prompt = await api.getStkPrompt(token, promptId);
+        if (cancelled) return;
         setStkFlowError("");
         setStkPrompt(prompt);
         if (prompt.payment) {
@@ -1188,12 +1211,20 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
           notify("STK payment received", "Confirm the payment in the open STK window.", "success");
         }
       } catch (err) {
+        if (cancelled) return;
         const messageText = err instanceof Error ? err.message : "Could not check STK prompt";
         setStkFlowError(`${messageText} Retrying...`);
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void poll(), 3000);
       }
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [notify, stkPrompt, token]);
+    };
+
+    timer = window.setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [notify, stkPrompt?.id, stkPrompt?.status, token]);
 
   async function sendStkPrompt() {
     const amount = Math.round(Number(stkAmount));

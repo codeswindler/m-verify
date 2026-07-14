@@ -132,10 +132,10 @@ git pull
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 ```
 
-For schema changes:
+Pending schema migrations run automatically before the API starts. This does not run seed data or replace existing users. Check the API startup log when a deployment includes database changes:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml exec api node apps/api/dist/scripts/migrate.js
+docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=100 api
 ```
 
 ## 8. Backups

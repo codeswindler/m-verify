@@ -39,9 +39,9 @@ export async function setAlwaysOnTop(value: boolean): Promise<void> {
   }
 }
 
-export async function startWindowDrag(): Promise<void> {
+export async function startWindowResize(): Promise<void> {
   try {
-    await getCurrentWindow().startDragging();
+    await getCurrentWindow().startResizeDragging("SouthEast");
   } catch {
     // Browser preview mode.
   }
@@ -51,7 +51,7 @@ export async function getCurrentAppVersion(): Promise<string> {
   try {
     return await getVersion();
   } catch {
-    return "0.1.4";
+    return "0.1.15";
   }
 }
 

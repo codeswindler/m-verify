@@ -233,7 +233,12 @@ In the admin M-Pesa tab, choose Paybill or Till number, save the Daraja consumer
 cd /var/www/m-verify
 git pull
 docker compose --env-file .env.production -f docker-compose.nginx.yml up -d --build
-docker compose --env-file .env.production -f docker-compose.nginx.yml exec api node apps/api/dist/scripts/migrate.js
+```
+
+The API container applies any pending database migrations before it starts. It does not run seed data or replace existing users. To verify the migration state after deployment, inspect the API startup log:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.nginx.yml logs --tail=100 api
 ```
 
 ## 10. Rollback/Stop

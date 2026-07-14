@@ -297,7 +297,7 @@ tenantsRouter.post(
       response.status(201).json(mapTenant(tenant));
     } catch (error) {
       if (error instanceof Error && error.message.includes("Duplicate")) {
-        throw new AppError(409, "Tenant slug already exists", "TENANT_EXISTS");
+        throw new AppError(409, "Business slug already exists", "BUSINESS_EXISTS");
       }
       throw error;
     }

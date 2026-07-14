@@ -14,6 +14,7 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  Scaling,
   ShieldCheck,
   UserPlus,
   Users,
@@ -38,7 +39,7 @@ import {
   restoreWindowState,
   saveCurrentWindowState,
   setAlwaysOnTop,
-  startWindowDrag,
+  startWindowResize,
   type NativeUpdateInfo,
   type UpdateInstallProgress
 } from "./tauri";
@@ -90,13 +91,6 @@ function compareVersions(left: string, right: string): number {
     if (diff !== 0) return diff;
   }
   return 0;
-}
-
-function handleTitlebarPointerDown(event: React.PointerEvent<HTMLDivElement>): void {
-  if (event.button !== 0) return;
-  const target = event.target as HTMLElement;
-  if (target.closest("button")) return;
-  void startWindowDrag();
 }
 
 function formatUpdateProgress(progress: UpdateInstallProgress | null): string {
@@ -180,7 +174,7 @@ function Titlebar({
   onLogout?: () => void;
 }) {
   return (
-    <div className="titlebar" data-tauri-drag-region onPointerDown={handleTitlebarPointerDown}>
+    <div className="titlebar" data-tauri-drag-region>
       <div className="title-brand" data-tauri-drag-region>
         <ShieldCheck size={19} />
         <span data-tauri-drag-region>M-Verify</span>
@@ -201,6 +195,24 @@ function Titlebar({
         )}
       </div>
     </div>
+  );
+}
+
+function ResizeGrip() {
+  return (
+    <button
+      type="button"
+      className="resize-grip"
+      title="Resize window"
+      aria-label="Resize window"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        void startWindowResize();
+      }}
+    >
+      <Scaling size={13} />
+    </button>
   );
 }
 
@@ -383,10 +395,15 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
   }
 
   useEffect(() => {
-    if (!stkPrompt || !["REQUESTED", "PENDING"].includes(stkPrompt.status)) return;
-    const timer = window.setInterval(async () => {
+    const promptId = stkPrompt && ["REQUESTED", "PENDING"].includes(stkPrompt.status) ? stkPrompt.id : null;
+    if (!promptId) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
       try {
-        const next = await api.getStkPrompt(auth.accessToken, stkPrompt.id);
+        const next = await api.getStkPrompt(auth.accessToken, promptId);
+        if (cancelled) return;
         setStkFlowError("");
         setStkPrompt(next);
         if (next.payment) {
@@ -396,11 +413,19 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
           setResult(null);
         }
       } catch (err) {
+        if (cancelled) return;
         setStkFlowError(err instanceof Error ? `${err.message} Retrying...` : "Connection interrupted. Retrying...");
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void poll(), 3000);
       }
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [auth.accessToken, stkPrompt]);
+    };
+
+    timer = window.setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [auth.accessToken, stkPrompt?.id, stkPrompt?.status]);
 
   async function sendStkPrompt() {
     const amount = Math.round(Number(stkAmount));
@@ -1128,6 +1153,7 @@ export function App() {
         <main className="session-restoring"><Loader2 className="spin" size={28} /><strong>Restoring session</strong><span>Connecting securely...</span></main>
       ) : auth ? <LoggedInApp auth={auth} onLogout={logout} update={update} /> : <Login onLogin={saveAuth} update={update} />}
       {auth && update && showUpdateDialog ? <UpdateDialog update={update} onDismiss={() => setShowUpdateDialog(false)} /> : null}
+      <ResizeGrip />
     </>
   );
 }
