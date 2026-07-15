@@ -14,6 +14,7 @@ import {
   Loader2,
   Lock,
   LogOut,
+  MessageCircle,
   Minus,
   Printer,
   ReceiptText,
@@ -48,7 +49,7 @@ import {
   type DatePreset
 } from "./format";
 import { clearSession, getDeviceId, loadSession, saveSession } from "./storage";
-import { printPaymentReceipt } from "./receipt";
+import { printPaymentReceipt, sharePaymentReceiptOnWhatsApp } from "./receipt";
 
 type ApiStatus = "idle" | "loading" | "ready" | "error";
 type AppTab = "verify" | "home" | "insights" | "summary" | "staff" | "sales";
@@ -463,6 +464,7 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
   const [error, setError] = useState("");
   const [printing, setPrinting] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -489,6 +491,19 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
     }
   }
 
+  async function shareOnWhatsApp() {
+    if (!receipt) return;
+    setSharing(true);
+    setError("");
+    try {
+      await sharePaymentReceiptOnWhatsApp(receipt);
+    } catch (shareError) {
+      setError(shareError instanceof Error ? shareError.message : "Could not open WhatsApp");
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <div className="receipt-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Verified payment receipt">
       <section className="receipt-dialog">
@@ -504,9 +519,13 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
         </div>
         <div className="receipt-dialog-actions">
           <button className="secondary-action" type="button" onClick={onClose}>Close</button>
+          <button className="secondary-action" type="button" onClick={() => void shareOnWhatsApp()} disabled={!receipt || sharing}>
+            {sharing ? <Loader2 className="spin" size={18} /> : <MessageCircle size={18} />}
+            WhatsApp
+          </button>
           <button className="primary-button" type="button" onClick={() => void printReceipt()} disabled={!receipt || printing}>
             {printing ? <Loader2 className="spin" size={18} /> : <Printer size={18} />}
-            {printing ? "Opening print" : "Print receipt"}
+            {printing ? "Opening" : "Print"}
           </button>
         </div>
       </section>

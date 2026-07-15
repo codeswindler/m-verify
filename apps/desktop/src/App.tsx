@@ -7,6 +7,7 @@ import {
   EyeOff,
   Loader2,
   LogOut,
+  MessageCircle,
   Minus,
   Pin,
   PinOff,
@@ -20,7 +21,7 @@ import {
   Users,
   XCircle
 } from "lucide-react";
-import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
+import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, buildWhatsAppReceiptUrl, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
 import type { AuthResponse, PaymentReceipt, PaymentSummary, StkPromptResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
 import {
   api,
@@ -297,6 +298,16 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
     return () => { cancelled = true; };
   }, [payment.id, token]);
 
+  async function shareOnWhatsApp() {
+    if (!receipt) return;
+    setError("");
+    try {
+      await openExternalUrl(buildWhatsAppReceiptUrl(receipt));
+    } catch (shareError) {
+      setError(shareError instanceof Error ? shareError.message : "Could not open WhatsApp");
+    }
+  }
+
   return (
     <div className="receipt-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Verified payment receipt">
       <section className="receipt-dialog">
@@ -312,6 +323,7 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
         </div>
         <div className="receipt-dialog-actions">
           <button className="small-button" type="button" onClick={onClose}>Close</button>
+          <button className="small-button" type="button" onClick={() => void shareOnWhatsApp()} disabled={!receipt}><MessageCircle size={15} /> WhatsApp</button>
           <button className="primary" type="button" onClick={() => window.print()} disabled={!receipt}><Printer size={15} /> Print</button>
         </div>
       </section>

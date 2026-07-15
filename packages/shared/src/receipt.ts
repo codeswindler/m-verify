@@ -39,12 +39,8 @@ export const paymentReceiptStyles = `
   }
   .mverify-receipt * { box-sizing: border-box; }
   .mverify-receipt__brand { text-align: center; padding-bottom: 14px; border-bottom: 1px dashed #8ba094; }
-  .mverify-receipt__mark {
-    display: inline-grid; width: 34px; height: 34px; place-items: center; margin-bottom: 7px;
-    border: 2px solid #068a47; color: #068a47; font-size: 18px; font-weight: 900;
-  }
-  .mverify-receipt h1 { margin: 0; font-size: 18px; line-height: 1.2; color: #0b351f; }
-  .mverify-receipt__title { margin: 4px 0 0; color: #4c6256; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .mverify-receipt h1 { margin: 0; font-size: 21px; line-height: 1.2; color: #0b351f; }
+  .mverify-receipt__title { margin: 6px 0 0; color: #4c6256; font-size: 10px; font-weight: 700; text-transform: uppercase; }
   .mverify-receipt__meta { display: grid; gap: 4px; padding: 13px 0; border-bottom: 1px dashed #8ba094; }
   .mverify-receipt__row { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
   .mverify-receipt__row span:first-child { color: #52675b; }
@@ -73,7 +69,6 @@ export function buildPaymentReceiptMarkup(receipt: PaymentReceipt): string {
   return `
     <article class="mverify-receipt" aria-label="M-Pesa payment receipt">
       <header class="mverify-receipt__brand">
-        <div class="mverify-receipt__mark">M</div>
         <h1>${escapeHtml(receipt.businessName)}</h1>
         <p class="mverify-receipt__title">M-Pesa payment receipt</p>
       </header>
@@ -102,6 +97,34 @@ export function buildPaymentReceiptMarkup(receipt: PaymentReceipt): string {
       </footer>
     </article>
   `;
+}
+
+export function buildPaymentReceiptShareText(receipt: PaymentReceipt): string {
+  const payment = receipt.payment;
+  const customer = payment.customerName || "M-Pesa customer";
+  const verifier = payment.verifiedBy?.fullName || payment.verifiedBy?.username || "Authorized staff";
+
+  return [
+    receipt.businessName,
+    "M-PESA PAYMENT RECEIPT",
+    "",
+    `Receipt: ${receipt.receiptNumber}`,
+    `Amount received: ${formatReceiptAmount(payment.amount)}`,
+    `Customer: ${customer}`,
+    `Phone / payer ID: ${payment.phoneNumber}`,
+    `M-Pesa code: ${payment.transactionCode}`,
+    `Reference: ${payment.reference || "-"}`,
+    `Received: ${formatReceiptDate(payment.paymentTime)}`,
+    `Verified by: ${verifier}`,
+    `Verified at: ${formatReceiptDate(payment.verifiedAt)}`,
+    "",
+    "PAYMENT VERIFIED",
+    "Verified with M-Verify"
+  ].join("\n");
+}
+
+export function buildWhatsAppReceiptUrl(receipt: PaymentReceipt): string {
+  return `https://wa.me/?text=${encodeURIComponent(buildPaymentReceiptShareText(receipt))}`;
 }
 
 export function buildPaymentReceiptHtml(receipt: PaymentReceipt): string {

@@ -8,6 +8,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  MessageCircle,
   Printer,
   ReceiptText,
   RefreshCw,
@@ -32,7 +33,7 @@ import type {
   UserPermissions,
   VerificationResponse
 } from "@m-verify/shared";
-import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, defaultPermissionsForRole, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
+import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, buildWhatsAppReceiptUrl, defaultPermissionsForRole, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
 import {
   api,
   downloadCsv,
@@ -962,6 +963,12 @@ function PaymentReceiptModal({ payment, token, onClose }: { payment: PaymentSumm
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [onClose]);
 
+  function shareOnWhatsApp() {
+    if (!receipt) return;
+    const opened = window.open(buildWhatsAppReceiptUrl(receipt), "_blank");
+    if (opened) opened.opener = null;
+  }
+
   return (
     <div className="modal-backdrop receipt-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
@@ -979,6 +986,7 @@ function PaymentReceiptModal({ payment, token, onClose }: { payment: PaymentSumm
         </div>
         <div className="modal-footer receipt-modal-actions">
           <button type="button" onClick={onClose}>Close</button>
+          <button type="button" onClick={shareOnWhatsApp} disabled={!receipt}><MessageCircle size={15} /> WhatsApp</button>
           <button className="primary" type="button" onClick={() => window.print()} disabled={!receipt}><Printer size={15} /> Print receipt</button>
         </div>
       </section>

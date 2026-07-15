@@ -1702,7 +1702,7 @@ tbody tr:hover td {
   width: 100%;
 }
 
-.receipt-modal-actions .primary {
+.receipt-modal-actions button {
   display: inline-flex;
   align-items: center;
   gap: 7px;

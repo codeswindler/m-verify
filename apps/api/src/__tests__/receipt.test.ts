@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPaymentReceiptMarkup, formatReceiptAmount, formatReceiptDate, type PaymentReceipt } from "@m-verify/shared";
+import { buildPaymentReceiptMarkup, buildPaymentReceiptShareText, buildWhatsAppReceiptUrl, formatReceiptAmount, formatReceiptDate, type PaymentReceipt } from "@m-verify/shared";
 
 const receipt: PaymentReceipt = {
   receiptNumber: "MVR-00000042",
@@ -37,5 +37,14 @@ describe("payment receipts", () => {
     expect(markup).toContain("Test &amp; Club");
     expect(markup).toContain("A &lt;Customer&gt;");
     expect(markup).not.toContain("A <Customer>");
+    expect(markup).not.toContain("mverify-receipt__mark");
+  });
+
+  it("builds a WhatsApp-ready verified receipt message", () => {
+    const text = buildPaymentReceiptShareText(receipt);
+    expect(text).toContain("Test & Club\nM-PESA PAYMENT RECEIPT");
+    expect(text).toContain("Amount received: KES 15");
+    expect(text).toContain("M-Pesa code: TST123ABC");
+    expect(decodeURIComponent(buildWhatsAppReceiptUrl(receipt))).toContain(text);
   });
 });

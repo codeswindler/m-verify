@@ -9,8 +9,8 @@ struct TopState(Mutex<bool>);
 
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://m-verify.theleasemaster.com/") {
-        return Err("Only M-Verify download links can be opened".to_string());
+    if !url.starts_with("https://m-verify.theleasemaster.com/") && !url.starts_with("https://wa.me/") {
+        return Err("This external link is not allowed".to_string());
     }
 
     #[cfg(target_os = "windows")]
