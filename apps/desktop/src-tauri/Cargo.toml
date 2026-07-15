@@ -1,6 +1,6 @@
 [package]
 name = "m-verify"
-version = "0.1.16"
+version = "0.1.17"
 description = "Standalone M-Pesa payment verification desktop app."
 authors = ["M-Verify"]
 edition = "2021"
@@ -21,3 +21,6 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

@@ -7,14 +7,47 @@ use tauri::{
 
 struct TopState(Mutex<bool>);
 
-#[tauri::command]
-fn open_external_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://m-verify.theleasemaster.com/") && !url.starts_with("https://wa.me/") {
-        return Err("This external link is not allowed".to_string());
+fn is_allowed_external_url(url: &str) -> bool {
+    url.starts_with("https://m-verify.theleasemaster.com/") || url.starts_with("https://wa.me/")
+}
+
+#[cfg(target_os = "windows")]
+fn open_url_with_system_handler(url: &str) -> Result<(), String> {
+    use std::{ffi::OsStr, os::windows::ffi::OsStrExt, ptr};
+    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+
+    let operation = OsStr::new("open")
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let target = OsStr::new(url)
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+
+    let result = unsafe {
+        ShellExecuteW(
+            ptr::null_mut(),
+            operation.as_ptr(),
+            target.as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+
+    if result as isize <= 32 {
+        return Err(format!(
+            "Windows could not open the link (code {})",
+            result as isize
+        ));
     }
 
-    #[cfg(target_os = "windows")]
-    let mut command = std::process::Command::new("explorer");
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn open_url_with_system_handler(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let mut command = std::process::Command::new("open");
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -25,6 +58,36 @@ fn open_external_url(url: String) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    if !is_allowed_external_url(&url) {
+        return Err("This external link is not allowed".to_string());
+    }
+
+    open_url_with_system_handler(&url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_external_url;
+
+    #[test]
+    fn allows_only_known_external_hosts() {
+        assert!(is_allowed_external_url(
+            "https://wa.me/?text=Verified%20payment"
+        ));
+        assert!(is_allowed_external_url(
+            "https://m-verify.theleasemaster.com/downloads/M-Verify-Setup.exe"
+        ));
+        assert!(!is_allowed_external_url(
+            "https://wa.me.evil.example/?text=receipt"
+        ));
+        assert!(!is_allowed_external_url(
+            "file:///C:/Users/william/Documents"
+        ));
+    }
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -38,7 +101,13 @@ fn show_main_window(app: &tauri::AppHandle) {
 fn create_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show M-Verify", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "Hide to tray", true, None::<&str>)?;
-    let always_on_top = MenuItem::with_id(app, "always_on_top", "Toggle always on top", true, None::<&str>)?;
+    let always_on_top = MenuItem::with_id(
+        app,
+        "always_on_top",
+        "Toggle always on top",
+        true,
+        None::<&str>,
+    )?;
     let logout = MenuItem::with_id(app, "logout", "Show login", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &hide, &always_on_top, &logout, &quit])?;
