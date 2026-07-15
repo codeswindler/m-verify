@@ -521,7 +521,7 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
           <button className="secondary-action" type="button" onClick={onClose}>Close</button>
           <button className="secondary-action" type="button" onClick={() => void shareOnWhatsApp()} disabled={!receipt || sharing}>
             {sharing ? <Loader2 className="spin" size={18} /> : <MessageCircle size={18} />}
-            WhatsApp
+            WhatsApp PDF
           </button>
           <button className="primary-button" type="button" onClick={() => void printReceipt()} disabled={!receipt || printing}>
             {printing ? <Loader2 className="spin" size={18} /> : <Printer size={18} />}

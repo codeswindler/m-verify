@@ -1708,6 +1708,19 @@ tbody tr:hover td {
   gap: 7px;
 }
 
+.receipt-modal-actions {
+  flex-wrap: wrap;
+}
+
+.receipt-share-note {
+  border: 1px solid #9ac8aa;
+  border-radius: var(--r);
+  background: #eef9f1;
+  color: #145c31;
+  padding: 10px;
+  font-size: 12px;
+}
+
 @media print {
   body * {
     visibility: hidden !important;

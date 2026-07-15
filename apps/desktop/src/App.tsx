@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   CheckCircle2,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -21,7 +22,7 @@ import {
   Users,
   XCircle
 } from "lucide-react";
-import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, buildWhatsAppReceiptUrl, paymentReceiptStyles, withAccessTokenExpiry } from "@m-verify/shared";
+import { accessTokenRefreshDelay, buildPaymentReceiptMarkup, buildWhatsAppReceiptUrl, downloadPaymentReceiptPdf, paymentReceiptStyles, sharePaymentReceiptPdf, withAccessTokenExpiry } from "@m-verify/shared";
 import type { AuthResponse, PaymentReceipt, PaymentSummary, StkPromptResponse, VerificationResponse, VerificationStatus } from "@m-verify/shared";
 import {
   api,
@@ -285,6 +286,7 @@ function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; upd
 function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSummary; token: string; onClose: () => void }) {
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -301,10 +303,29 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
   async function shareOnWhatsApp() {
     if (!receipt) return;
     setError("");
+    setNotice("");
     try {
+      try {
+        if (await sharePaymentReceiptPdf(receipt)) return;
+      } catch (nativeShareError) {
+        if (nativeShareError instanceof DOMException && nativeShareError.name === "AbortError") return;
+      }
+      await downloadPaymentReceiptPdf(receipt);
       await openExternalUrl(buildWhatsAppReceiptUrl(receipt));
+      setNotice("Receipt PDF downloaded. Attach it to the WhatsApp chat that opened.");
     } catch (shareError) {
-      setError(shareError instanceof Error ? shareError.message : "Could not open WhatsApp");
+      setError(shareError instanceof Error ? shareError.message : "Could not share receipt PDF");
+    }
+  }
+
+  async function downloadPdf() {
+    if (!receipt) return;
+    setError("");
+    setNotice("");
+    try {
+      await downloadPaymentReceiptPdf(receipt);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Could not create receipt PDF");
     }
   }
 
@@ -319,11 +340,13 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
         <div className="receipt-preview">
           {!receipt && !error && <div className="empty-state">Preparing receipt...</div>}
           {error && <div className="error">{error}</div>}
+          {notice && <div className="receipt-share-note">{notice}</div>}
           {receipt && <div className="receipt-print-target" dangerouslySetInnerHTML={{ __html: buildPaymentReceiptMarkup(receipt) }} />}
         </div>
         <div className="receipt-dialog-actions">
           <button className="small-button" type="button" onClick={onClose}>Close</button>
-          <button className="small-button" type="button" onClick={() => void shareOnWhatsApp()} disabled={!receipt}><MessageCircle size={15} /> WhatsApp</button>
+          <button className="small-button" type="button" onClick={() => void downloadPdf()} disabled={!receipt}><Download size={15} /> PDF</button>
+          <button className="small-button" type="button" onClick={() => void shareOnWhatsApp()} disabled={!receipt}><MessageCircle size={15} /> WhatsApp PDF</button>
           <button className="primary" type="button" onClick={() => window.print()} disabled={!receipt}><Printer size={15} /> Print</button>
         </div>
       </section>

@@ -553,6 +553,16 @@ input:focus {
 
 .receipt-dialog-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.receipt-share-note {
+  border: 1px solid #9ac8aa;
+  border-radius: 6px;
+  background: #eef9f1;
+  color: #145c31;
+  padding: 8px;
+  font-size: 11px;
 }
 
 .receipt-dialog-actions .primary {

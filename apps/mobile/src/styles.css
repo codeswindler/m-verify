@@ -1156,6 +1156,15 @@ dd {
   flex: 1;
 }
 
+.receipt-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.receipt-dialog-actions .primary-button {
+  grid-column: 1 / -1;
+}
+
 .mobile-recovery-screen {
   display: grid;
   min-height: 100vh;

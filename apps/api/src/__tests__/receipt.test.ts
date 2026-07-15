@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPaymentReceiptMarkup, buildPaymentReceiptShareText, buildWhatsAppReceiptUrl, formatReceiptAmount, formatReceiptDate, type PaymentReceipt } from "@m-verify/shared";
+import { buildPaymentReceiptMarkup, buildPaymentReceiptPdf, buildPaymentReceiptShareText, buildWhatsAppReceiptUrl, formatReceiptAmount, formatReceiptDate, paymentReceiptPdfFileName, type PaymentReceipt } from "@m-verify/shared";
 
 const receipt: PaymentReceipt = {
   receiptNumber: "MVR-00000042",
@@ -46,5 +46,12 @@ describe("payment receipts", () => {
     expect(text).toContain("Amount received: KES 15");
     expect(text).toContain("M-Pesa code: TST123ABC");
     expect(decodeURIComponent(buildWhatsAppReceiptUrl(receipt))).toContain(text);
+  });
+
+  it("creates a real PDF receipt with a stable file name", async () => {
+    const pdf = await buildPaymentReceiptPdf(receipt);
+    expect(new TextDecoder().decode(pdf.slice(0, 5))).toBe("%PDF-");
+    expect(pdf.byteLength).toBeGreaterThan(1_000);
+    expect(paymentReceiptPdfFileName(receipt)).toBe("MVR-00000042.pdf");
   });
 });

@@ -1,4 +1,5 @@
 import type { PaymentReceipt } from "./index.js";
+import type { Color, PDFFont, PDFPage } from "pdf-lib";
 
 function escapeHtml(value: string | number | null | undefined): string {
   return String(value ?? "")
@@ -125,6 +126,223 @@ export function buildPaymentReceiptShareText(receipt: PaymentReceipt): string {
 
 export function buildWhatsAppReceiptUrl(receipt: PaymentReceipt): string {
   return `https://wa.me/?text=${encodeURIComponent(buildPaymentReceiptShareText(receipt))}`;
+}
+
+const pointsPerMillimeter = 72 / 25.4;
+
+function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => {
+      if (font.widthOfTextAtSize(word, size) <= maxWidth) return [word];
+      const segments: string[] = [];
+      let segment = "";
+      for (const character of word) {
+        if (segment && font.widthOfTextAtSize(`${segment}${character}`, size) > maxWidth) {
+          segments.push(segment);
+          segment = character;
+        } else {
+          segment += character;
+        }
+      }
+      if (segment) segments.push(segment);
+      return segments;
+    });
+  if (words.length === 0) return [""];
+
+  const lines: string[] = [];
+  let line = words[0] ?? "";
+  for (const word of words.slice(1)) {
+    const candidate = `${line} ${word}`;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      line = candidate;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+
+function drawCenteredLines(
+  page: PDFPage,
+  lines: string[],
+  font: PDFFont,
+  size: number,
+  y: number,
+  color: Color,
+  lineHeight = size + 3
+): number {
+  const width = page.getWidth();
+  for (const line of lines) {
+    const textWidth = font.widthOfTextAtSize(line, size);
+    page.drawText(line, { x: Math.max(18, (width - textWidth) / 2), y, size, font, color });
+    y -= lineHeight;
+  }
+  return y;
+}
+
+function drawReceiptDivider(page: PDFPage, y: number, color: Color): void {
+  page.drawLine({
+    start: { x: 18, y },
+    end: { x: page.getWidth() - 18, y },
+    thickness: 0.65,
+    color,
+    dashArray: [3, 3]
+  });
+}
+
+function drawReceiptRow(
+  page: PDFPage,
+  label: string,
+  value: string,
+  regular: PDFFont,
+  bold: PDFFont,
+  y: number,
+  mutedColor: Color,
+  textColor: Color
+): number {
+  const right = page.getWidth() - 18;
+  const valueLines = wrapPdfText(value || "-", bold, 8.4, 116).slice(0, 3);
+  page.drawText(label, { x: 18, y, size: 8, font: regular, color: mutedColor });
+  valueLines.forEach((line, index) => {
+    const lineWidth = bold.widthOfTextAtSize(line, 8.4);
+    page.drawText(line, {
+      x: right - lineWidth,
+      y: y - index * 10,
+      size: 8.4,
+      font: bold,
+      color: textColor
+    });
+  });
+  return y - Math.max(14, valueLines.length * 10 + 4);
+}
+
+export function paymentReceiptPdfFileName(receipt: PaymentReceipt): string {
+  const safeNumber = receipt.receiptNumber.replace(/[^A-Za-z0-9_-]+/g, "-");
+  return `${safeNumber || "M-Verify-Receipt"}.pdf`;
+}
+
+export async function buildPaymentReceiptPdf(receipt: PaymentReceipt): Promise<Uint8Array> {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const document = await PDFDocument.create();
+  const regular = await document.embedFont(StandardFonts.Helvetica);
+  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const width = 80 * pointsPerMillimeter;
+  const height = 155 * pointsPerMillimeter;
+  const page = document.addPage([width, height]);
+  const payment = receipt.payment;
+  const customer = payment.customerName || "M-Pesa customer";
+  const verifier = payment.verifiedBy?.fullName || payment.verifiedBy?.username || "Authorized staff";
+  const dividerColor = rgb(0.52, 0.63, 0.57);
+  const mutedColor = rgb(0.28, 0.38, 0.32);
+  const textColor = rgb(0.03, 0.1, 0.06);
+
+  document.setTitle(`${receipt.receiptNumber} - ${receipt.businessName}`);
+  document.setAuthor("M-Verify");
+  document.setSubject("Verified M-Pesa payment receipt");
+  document.setCreator("M-Verify");
+
+  let y = height - 27;
+  const businessLines = wrapPdfText(receipt.businessName, bold, 16, width - 36).slice(0, 2);
+  y = drawCenteredLines(page, businessLines, bold, 16, y, rgb(0.03, 0.28, 0.15), 18);
+  y = drawCenteredLines(page, ["M-PESA PAYMENT RECEIPT"], bold, 7.8, y - 1, rgb(0.27, 0.38, 0.31), 11);
+  drawReceiptDivider(page, y - 2, dividerColor);
+  y -= 17;
+
+  y = drawReceiptRow(page, "Receipt", receipt.receiptNumber, regular, bold, y, mutedColor, textColor);
+  y = drawReceiptRow(page, "Issued", formatReceiptDate(receipt.issuedAt), regular, bold, y, mutedColor, textColor);
+  drawReceiptDivider(page, y + 3, dividerColor);
+
+  y -= 16;
+  y = drawCenteredLines(page, ["AMOUNT RECEIVED"], regular, 7.5, y, rgb(0.32, 0.42, 0.36), 12);
+  y -= 10;
+  y = drawCenteredLines(page, [formatReceiptAmount(payment.amount)], bold, 22, y, rgb(0.02, 0.16, 0.08), 27);
+  drawReceiptDivider(page, y + 7, dividerColor);
+  y -= 8;
+
+  const details: Array<[string, string]> = [
+    ["Customer", customer],
+    ["Phone / payer ID", payment.phoneNumber],
+    ["M-Pesa code", payment.transactionCode],
+    ["Reference", payment.reference || "-"],
+    ["Payment channel", payment.paymentChannel],
+    ["Received", formatReceiptDate(payment.paymentTime)],
+    ["Verified by", verifier],
+    ["Verified at", formatReceiptDate(payment.verifiedAt)]
+  ];
+  for (const [label, value] of details) {
+    y = drawReceiptRow(page, label, value, regular, bold, y, mutedColor, textColor);
+  }
+  drawReceiptDivider(page, y + 4, dividerColor);
+
+  const verifiedHeight = 27;
+  y -= verifiedHeight - 3;
+  page.drawRectangle({
+    x: 18,
+    y,
+    width: width - 36,
+    height: verifiedHeight,
+    borderWidth: 0.8,
+    borderColor: rgb(0.38, 0.72, 0.52),
+    color: rgb(0.93, 0.98, 0.95)
+  });
+  const verifiedText = "PAYMENT VERIFIED";
+  const verifiedWidth = bold.widthOfTextAtSize(verifiedText, 9);
+  page.drawText(verifiedText, {
+    x: (width - verifiedWidth) / 2,
+    y: y + 9,
+    size: 9,
+    font: bold,
+    color: rgb(0.03, 0.45, 0.22)
+  });
+
+  y -= 17;
+  const footerLines = wrapPdfText(
+    "This receipt confirms that the M-Pesa payment above was received and verified. It does not itemise goods or services.",
+    regular,
+    6.7,
+    width - 46
+  );
+  y = drawCenteredLines(page, footerLines, regular, 6.7, y, rgb(0.31, 0.4, 0.35), 9);
+  drawCenteredLines(page, ["Verified with M-Verify"], bold, 7, y - 3, rgb(0.14, 0.26, 0.19), 9);
+
+  return document.save();
+}
+
+export async function createPaymentReceiptPdfFile(receipt: PaymentReceipt): Promise<File> {
+  const bytes = await buildPaymentReceiptPdf(receipt);
+  const buffer = new Uint8Array(bytes).buffer;
+  return new File([buffer], paymentReceiptPdfFileName(receipt), { type: "application/pdf" });
+}
+
+export async function downloadPaymentReceiptPdf(receipt: PaymentReceipt): Promise<void> {
+  const file = await createPaymentReceiptPdfFile(receipt);
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+export async function sharePaymentReceiptPdf(receipt: PaymentReceipt): Promise<boolean> {
+  if (typeof navigator.share !== "function") return false;
+  const file = await createPaymentReceiptPdfFile(receipt);
+  const data: ShareData = {
+    files: [file],
+    title: `${receipt.businessName} payment receipt`,
+    text: `Verified M-Pesa receipt ${receipt.receiptNumber}`
+  };
+  if (typeof navigator.canShare === "function" && !navigator.canShare(data)) return false;
+  await navigator.share(data);
+  return true;
 }
 
 export function buildPaymentReceiptHtml(receipt: PaymentReceipt): string {
