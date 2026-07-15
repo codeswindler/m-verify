@@ -344,7 +344,7 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
           <MVerifyMark />
           <p className="eyebrow">M-Pesa verification</p>
           <h1>M-Verify</h1>
-          <p>Waiter and business admin access.</p>
+          <p>Staff and business admin access.</p>
         </div>
 
         <form className="auth-form" onSubmit={submit}>
@@ -352,7 +352,7 @@ function LoginScreen({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
             <span>Username</span>
             <input
               autoComplete="username"
-              placeholder="waiter or admin username"
+              placeholder="staff or admin username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
             />
@@ -934,7 +934,7 @@ function VerifyScreen({
             ) : stkPayment ? (
               <>
                 <CheckCircle2 className="stk-flow-status-icon" size={62} />
-                <div className="stk-flow-copy"><span className="stk-flow-kicker">Payment received</span><h2>{money(stkPayment.amount)} paid</h2><p>Confirm this receipt here to complete the waiter check.</p></div>
+                <div className="stk-flow-copy"><span className="stk-flow-kicker">Payment received</span><h2>{money(stkPayment.amount)} paid</h2><p>Confirm this receipt here to complete the staff check.</p></div>
                 {error ? <div className="stk-flow-inline-error">{error}</div> : null}
                 <div className="stk-flow-receipt">
                   <div><span>Customer</span><strong>{paymentName(stkPayment)}</strong></div>
@@ -1492,10 +1492,10 @@ function StaffScreen({
               const role = event.target.value as StaffRole;
               setForm({ ...form, role, permissions: defaultPermissionsForRole(role) });
             }}>
-              <option value="waiter">Waiter</option>
+              <option value="waiter">Staff</option>
               <option value="manager">Business admin</option>
             </select>
-            <input placeholder="Temporary password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+            <input required minLength={4} maxLength={200} placeholder="Temporary password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
           </div>
           <div className="permission-grid">
             {permissionLabels.map((permission) => (
@@ -1543,7 +1543,7 @@ function StaffScreen({
               <article key={user.id}>
                 <div>
                   <strong>{user.fullName}</strong>
-                  <span>{user.role === "manager" ? "Business admin" : "Waiter"} - {user.disabled ? "disabled" : "active"}</span>
+                  <span>{user.role === "manager" ? "Business admin" : "Staff"} - {user.disabled ? "disabled" : "active"}</span>
                   <div className="permission-pills">
                     {permissionLabels.map((permission) => (
                       <button

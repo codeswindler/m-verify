@@ -34,11 +34,14 @@ import {
 import {
   checkNativeUpdate,
   enableAutostartOnce,
+  expandWindowForReceipt,
   getCurrentAppVersion,
   hideWindow,
   installNativeUpdate,
+  isMicrosoftStoreBuild,
   openExternalUrl,
   restoreWindowState,
+  restoreWindowSize,
   saveCurrentWindowState,
   setAlwaysOnTop,
   startWindowResize,
@@ -236,7 +239,7 @@ function Login({ onLogin, update }: { onLogin: (auth: AuthResponse) => void; upd
         deviceId: getDeviceId(),
         deviceName: "M-Verify Windows Desktop"
       });
-      await enableAutostartOnce();
+      if (!isMicrosoftStoreBuild) await enableAutostartOnce();
       onLogin(auth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -287,6 +290,19 @@ function PaymentReceiptDialog({ payment, token, onClose }: { payment: PaymentSum
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    let previousSize: Awaited<ReturnType<typeof expandWindowForReceipt>> = null;
+    void expandWindowForReceipt().then((snapshot) => {
+      if (mounted) previousSize = snapshot;
+      else void restoreWindowSize(snapshot);
+    });
+    return () => {
+      mounted = false;
+      void restoreWindowSize(previousSize);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -533,7 +549,7 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
             <div className={`result result-${stkPrompt.status === "PAID" ? "verified" : ["FAILED", "CANCELLED", "TIMED_OUT"].includes(stkPrompt.status) ? "error" : "pending"}`}>
               <strong>{stkPrompt.status.replace(/_/g, " ")}</strong>
               <span>{stkPrompt.message}</span>
-              {stkPrompt.payment && <span>Select “Verify selected payment” to complete the waiter check.</span>}
+              {stkPrompt.payment && <span>Select “Verify selected payment” to complete the staff check.</span>}
             </div>
           )}
         </div>
@@ -944,10 +960,10 @@ function StaffView({ token }: { token: string }) {
         <input placeholder="Full name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
         <div className="two-col">
           <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as "manager" | "waiter" })}>
-            <option value="waiter">Waiter</option>
+            <option value="waiter">Staff</option>
             <option value="manager">Business Admin</option>
           </select>
-          <input placeholder="Password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+          <input required minLength={4} maxLength={200} placeholder="Password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
         </div>
         <button className="primary" disabled={!form.username || !form.fullName || !form.password}>
           <UserPlus size={15} />
@@ -963,7 +979,7 @@ function StaffView({ token }: { token: string }) {
             <div className="list-row" key={user.id}>
               <div>
                 <strong>{user.fullName}</strong>
-                <span>{user.role === "manager" ? "business admin" : "waiter"} - {user.disabled ? "disabled" : "active"}</span>
+                <span>{user.role === "manager" ? "business admin" : "staff"} - {user.disabled ? "disabled" : "active"}</span>
               </div>
               <div className="row-actions">
                 <button type="button" onClick={() => void resetPassword(user)}>Pw</button>
@@ -1032,7 +1048,7 @@ function LoggedInApp({ auth, update, onLogout }: { auth: AuthResponse; update: U
         <div className="operator-row">
           <div>
             <strong>{auth.user.tenantName ?? auth.user.fullName}</strong>
-            <span>{auth.user.role === "manager" ? "business admin" : "waiter"}</span>
+            <span>{auth.user.role === "manager" ? "business admin" : "staff"}</span>
           </div>
           <CheckCircle2 size={18} />
         </div>
@@ -1063,7 +1079,7 @@ export function App() {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    void enableAutostartOnce();
+    if (!isMicrosoftStoreBuild) void enableAutostartOnce();
     void restoreWindowState();
     window.addEventListener("beforeunload", () => {
       void saveCurrentWindowState();
@@ -1071,6 +1087,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (isMicrosoftStoreBuild) return;
+
     let cancelled = false;
     async function checkForUpdate() {
       try {

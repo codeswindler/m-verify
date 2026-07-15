@@ -1119,7 +1119,9 @@ dd {
 
 .receipt-dialog {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(100%, 30rem);
+  height: min(100%, 48rem);
   max-height: 100%;
   gap: 0.7rem;
   overflow: hidden;
@@ -1144,7 +1146,7 @@ dd {
 }
 
 .receipt-preview {
-  min-height: 8rem;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -1158,11 +1160,20 @@ dd {
 
 .receipt-dialog-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .receipt-dialog-actions .primary-button {
-  grid-column: 1 / -1;
+  grid-column: auto;
+}
+
+.receipt-dialog-actions .secondary-action,
+.receipt-dialog-actions .primary-button {
+  min-height: 2.65rem;
+  padding: 0 0.7rem;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .mobile-recovery-screen {

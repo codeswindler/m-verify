@@ -155,7 +155,7 @@ export type PaginatedResponse<T> = {
 
 export const loginSchema = z.object({
   username: z.string().min(2).max(80),
-  password: z.string().min(6).max(200),
+  password: z.string().min(4).max(200),
   deviceId: z.string().min(8).max(120),
   deviceName: z.string().max(120).optional()
 });
@@ -207,7 +207,7 @@ export const createUserSchema = z.object({
   username: z.string().min(2).max(80),
   fullName: z.string().min(2).max(120),
   role: z.enum(userRoles),
-  password: z.string().min(8).max(200),
+  password: z.string().min(4).max(200),
   tenantId: z.coerce.number().int().positive().optional(),
   permissions: userPermissionsSchema.optional()
 });
@@ -216,7 +216,7 @@ export const updateUserSchema = z.object({
   fullName: z.string().min(2).max(120).optional(),
   role: z.enum(userRoles).optional(),
   disabled: z.boolean().optional(),
-  password: z.string().min(8).max(200).optional(),
+  password: z.string().min(4).max(200).optional(),
   tenantId: z.coerce.number().int().positive().nullable().optional(),
   permissions: userPermissionsSchema.optional()
 });
@@ -232,6 +232,7 @@ export const listQuerySchema = z.object({
 export const tenantSlugSchema = z
   .string()
   .trim()
+  .toLowerCase()
   .min(2)
   .max(80)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only");

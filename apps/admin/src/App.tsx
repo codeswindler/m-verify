@@ -444,6 +444,15 @@ function emptyBusinessForm(): CreateTenantPayload {
   };
 }
 
+function normalizeBusinessSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 function businessToForm(business: TenantSummary): UpdateTenantPayload {
   return {
     name: business.name,
@@ -458,7 +467,7 @@ function businessToForm(business: TenantSummary): UpdateTenantPayload {
 function cleanBusinessPayload(form: CreateTenantPayload | UpdateTenantPayload): CreateTenantPayload | UpdateTenantPayload {
   return {
     ...form,
-    slug: form.slug?.trim() || undefined,
+    slug: form.slug ? normalizeBusinessSlug(form.slug) || undefined : undefined,
     commissionRatePct: Number(form.commissionRatePct ?? 0),
     contactEmail: form.contactEmail?.trim() ?? "",
     contactPhone: form.contactPhone?.trim() ?? ""
@@ -766,8 +775,13 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
           <form className="user-form create-business-form" onSubmit={createBusiness}>
             <h2><Building2 size={16} /> Create business</h2>
             <div className="form-grid two">
-              <label>Name<input required minLength={2} maxLength={160} value={businessForm.name} onChange={(event) => setBusinessForm({ ...businessForm, name: event.target.value })} /></label>
-              <label>Slug<input minLength={2} maxLength={80} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only" value={businessForm.slug ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, slug: event.target.value })} /></label>
+              <label>Name<input required minLength={2} maxLength={160} value={businessForm.name} onChange={(event) => {
+                const name = event.target.value;
+                const previousGeneratedSlug = normalizeBusinessSlug(businessForm.name);
+                const shouldUpdateSlug = !businessForm.slug || businessForm.slug === previousGeneratedSlug;
+                setBusinessForm({ ...businessForm, name, ...(shouldUpdateSlug ? { slug: normalizeBusinessSlug(name) } : {}) });
+              }} /></label>
+              <label>Slug<input minLength={2} maxLength={80} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only" value={businessForm.slug ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, slug: normalizeBusinessSlug(event.target.value) })} /></label>
               <label>Commission %<input type="number" min="0" max="100" step="0.01" value={businessForm.commissionRatePct ?? 0} onChange={(event) => setBusinessForm({ ...businessForm, commissionRatePct: Number(event.target.value) })} /></label>
               <label>Email<input type="email" value={businessForm.contactEmail ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactEmail: event.target.value })} /></label>
               <label>Phone<input value={businessForm.contactPhone ?? ""} onChange={(event) => setBusinessForm({ ...businessForm, contactPhone: event.target.value })} /></label>
@@ -814,7 +828,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
               <form className="mpesa-form" onSubmit={saveBusiness}>
                 <div className="form-grid two">
                   <label>Name<input value={editForm.name ?? ""} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /></label>
-                  <label>Slug<input value={editForm.slug ?? ""} onChange={(event) => setEditForm({ ...editForm, slug: event.target.value })} /></label>
+                  <label>Slug<input minLength={2} maxLength={80} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only" value={editForm.slug ?? ""} onChange={(event) => setEditForm({ ...editForm, slug: normalizeBusinessSlug(event.target.value) })} /></label>
                   <label>Commission %<input type="number" min="0" max="100" step="0.01" value={editForm.commissionRatePct ?? 0} onChange={(event) => setEditForm({ ...editForm, commissionRatePct: Number(event.target.value) })} /></label>
                   <label>Status<select value={editForm.status ?? "active"} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as TenantSummary["status"] })}><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
                   <label>Email<input value={editForm.contactEmail ?? ""} onChange={(event) => setEditForm({ ...editForm, contactEmail: event.target.value })} /></label>
@@ -840,8 +854,8 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                     <label>Role<select value={staffForm.role} onChange={(event) => {
                       const role = event.target.value as CreateUserPayload["role"];
                       setStaffForm({ ...staffForm, role, permissions: defaultPermissionsForRole(role) });
-                    }}><option value="waiter">Waiter</option><option value="manager">Business Admin</option></select></label>
-                    <label>Temporary password<input required minLength={8} maxLength={200} type="password" value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} /></label>
+                    }}><option value="waiter">Staff</option><option value="manager">Business Admin</option></select></label>
+                    <label>Temporary password<input required minLength={4} maxLength={200} type="password" value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} /></label>
                   </div>
                   <div className="permission-grid">
                     {permissionLabels.map((permission) => (
@@ -870,7 +884,7 @@ function BusinessesView({ token, notify }: { token: string; notify: Notify }) {
                       {!businessUsers.length ? <EmptyRow label="No business users yet" /> : businessUsers.map((user) => (
                         <tr key={user.id}>
                           <td><strong>{user.username}</strong><span className="subtext">{user.fullName}</span></td>
-                          <td><span className="status">{user.role === "manager" ? "business admin" : user.role}</span></td>
+                          <td><span className="status">{user.role === "manager" ? "business admin" : "staff"}</span></td>
                           <td>
                             <div className="permission-pills">
                               {permissionLabels.map((permission) => (
@@ -1433,7 +1447,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
             ) : stkPayment ? (
               <>
                 <CheckCircle2 className="stk-flow-status-icon" size={62} />
-                <div className="stk-flow-copy"><span className="stk-flow-kicker">Payment received</span><h2>KES {formatAmount(stkPayment.amount)} paid</h2><p>Confirm this receipt here to complete the waiter check.</p></div>
+                <div className="stk-flow-copy"><span className="stk-flow-kicker">Payment received</span><h2>KES {formatAmount(stkPayment.amount)} paid</h2><p>Confirm this receipt here to complete the staff check.</p></div>
                 {error && <div className="stk-flow-inline-error">{error}</div>}
                 <div className="stk-flow-receipt">
                   <div><span>Customer</span><strong>{stkPayment.customerName ?? "M-Pesa customer"}</strong></div>
@@ -1586,11 +1600,11 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
               const role = event.target.value as CreateUserPayload["role"];
               setForm({ ...form, role, permissions: defaultPermissionsForRole(role) });
             }}>
-              <option value="waiter">Waiter</option>
+              <option value="waiter">Staff</option>
               <option value="manager">Business Admin</option>
             </select></label>
           )}
-          <label>Temporary password<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+          <label>Temporary password<input required minLength={4} maxLength={200} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
           {!isPlatform && (
             <div className="permission-grid">
               {permissionLabels.map((permission) => (
@@ -1617,7 +1631,7 @@ function UsersView({ auth, notify }: { auth: AuthResponse; notify: Notify }) {
               {!visibleUsers.length ? <EmptyRow label="No users found" /> : visibleUsers.map((user) => (
                 <tr key={user.id}>
                   <td><strong>{user.username}</strong><span className="subtext">{user.fullName}</span></td>
-                  <td><span className="status">{user.role === "admin" ? "platform admin" : user.role === "manager" ? "business admin" : user.role}</span></td>
+                  <td><span className="status">{user.role === "admin" ? "platform admin" : user.role === "manager" ? "business admin" : "staff"}</span></td>
                   {!isPlatform && (
                     <td>
                       <div className="permission-pills">
@@ -1754,7 +1768,7 @@ export function App() {
       <header className="topbar">
         <div className="brand-lockup">
           <MVerifyIcon size={34} />
-          <div className="brand-lockup-text"><h1>{title}</h1><p>{auth.user.fullName} - {auth.user.role === "manager" ? "business admin" : auth.user.role}</p></div>
+          <div className="brand-lockup-text"><h1>{title}</h1><p>{auth.user.fullName} - {auth.user.role === "manager" ? "business admin" : auth.user.role === "waiter" ? "staff" : auth.user.role}</p></div>
         </div>
         <nav className="topnav">
           {isPlatform ? (

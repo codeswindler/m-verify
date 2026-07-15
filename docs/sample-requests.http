@@ -92,10 +92,10 @@ Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "username": "waiter1",
-  "fullName": "Waiter One",
+  "username": "staff1",
+  "fullName": "Staff One",
   "role": "waiter",
-  "password": "waiter1234",
+  "password": "staff1234",
   "tenantId": 1
 }
 

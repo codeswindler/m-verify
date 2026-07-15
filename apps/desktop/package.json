@@ -1,7 +1,7 @@
 {
   "name": "@m-verify/desktop",
   "private": true,
-  "version": "0.1.18",
+  "version": "0.1.19",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 1420",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "tauri:build:store": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-msix.ps1",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

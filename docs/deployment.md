@@ -123,7 +123,7 @@ The installer and updater signature are created at:
 apps/desktop/src-tauri/target/release/bundle/nsis/
 ```
 
-Install that `.exe` on cashier or waiter machines. The app registers Windows startup after launch and uses the hosted API. Upload the versioned `.exe` used by `DESKTOP_UPDATER_URL` and put the contents of its `.sig` file in `DESKTOP_UPDATER_SIGNATURE` to enable in-app updates.
+Install that `.exe` on cashier or staff machines. The app registers Windows startup after launch and uses the hosted API. Upload the versioned `.exe` used by `DESKTOP_UPDATER_URL` and put the contents of its `.sig` file in `DESKTOP_UPDATER_SIGNATURE` to enable in-app updates.
 
 ## 7. Update A Live Deployment
 

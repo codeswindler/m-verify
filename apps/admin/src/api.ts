@@ -138,8 +138,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok) {
     let message = `Request failed with ${response.status}`;
     try {
-      const payload = (await response.json()) as { message?: string };
-      message = payload.message ?? message;
+      const payload = (await response.json()) as {
+        message?: string;
+        details?: {
+          formErrors?: string[];
+          fieldErrors?: Record<string, string[]>;
+        };
+      };
+      const fieldError = Object.entries(payload.details?.fieldErrors ?? {}).find(([, errors]) => errors.length > 0);
+      if (fieldError) {
+        const label = fieldError[0]
+          .replace(/([a-z])([A-Z])/g, "$1 $2")
+          .replace(/^./, (character) => character.toUpperCase());
+        message = `${label}: ${fieldError[1][0]}`;
+      } else {
+        message = payload.details?.formErrors?.[0] ?? payload.message ?? message;
+      }
     } catch {
       // Keep the status-based message when the body is not JSON.
     }

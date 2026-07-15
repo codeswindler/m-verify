@@ -1687,11 +1687,15 @@ tbody tr:hover td {
 }
 
 .receipt-modal-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(520px, 100%);
-  max-height: calc(100vh - 32px);
+  height: min(760px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px);
+  overflow: hidden;
 }
 
 .receipt-preview {
+  min-height: 0;
   overflow: auto;
   border-radius: var(--r);
   background: #eef4f0;
@@ -1705,11 +1709,18 @@ tbody tr:hover td {
 .receipt-modal-actions button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  width: auto;
+  min-height: 34px;
+  gap: 5px;
+  padding: 0 11px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .receipt-modal-actions {
   flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 
 .receipt-share-note {

@@ -150,6 +150,22 @@ apps/desktop/src-tauri/target/release/bundle/nsis/
 
 Apps before `0.1.4` need one manual installer update because they do not contain the updater plugin. After that bootstrap release, signed updates can be installed in-app.
 
+### Microsoft Store MSIX
+
+The Microsoft Store build uses the reserved Store identity and lets Microsoft sign and update the app. Build it on Windows with the Windows SDK installed:
+
+```powershell
+pnpm --filter @m-verify/desktop tauri:build:store
+```
+
+The uploadable x64 package is written to:
+
+```text
+downloads/M-Verify-<version>-x64.msix
+```
+
+This Store build declares the Windows startup task in its package manifest and disables M-Verify's standalone NSIS updater. The existing NSIS build remains available for direct website downloads. See `docs/microsoft-store.md` for the Store identity, Partner Center upload steps, and release behavior.
+
 ## Verification Rules
 
 The verifier searches received payments by M-Pesa transaction code, amount, or customer name. Staff must select a received payment before the app can formally verify it. Daraja confirmations create received payments only, so there is no pending payment state in the verifier. The API locks the selected payment row, logs every attempt, and returns one of:

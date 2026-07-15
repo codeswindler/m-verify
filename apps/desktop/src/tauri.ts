@@ -1,5 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -7,6 +8,8 @@ import { check } from "@tauri-apps/plugin-updater";
 import { restoreStateCurrent, saveWindowState, StateFlags } from "@tauri-apps/plugin-window-state";
 
 type TauriUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
+
+export const isMicrosoftStoreBuild = import.meta.env.VITE_MICROSOFT_STORE === "true";
 
 export type NativeUpdateInfo = {
   kind: "native";
@@ -21,6 +24,11 @@ export type UpdateInstallProgress = {
   status: "started" | "downloading" | "finished";
   downloaded?: number;
   total?: number;
+};
+
+export type WindowSizeSnapshot = {
+  width: number;
+  height: number;
 };
 
 export async function hideWindow(): Promise<void> {
@@ -47,11 +55,39 @@ export async function startWindowResize(): Promise<void> {
   }
 }
 
+export async function expandWindowForReceipt(): Promise<WindowSizeSnapshot | null> {
+  try {
+    const currentWindow = getCurrentWindow();
+    const [size, scaleFactor] = await Promise.all([currentWindow.innerSize(), currentWindow.scaleFactor()]);
+    const previous = {
+      width: Math.round(size.width / scaleFactor),
+      height: Math.round(size.height / scaleFactor)
+    };
+    const width = Math.max(previous.width, 460);
+    const height = Math.max(previous.height, 720);
+    if (width !== previous.width || height !== previous.height) {
+      await currentWindow.setSize(new LogicalSize(width, height));
+    }
+    return previous;
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreWindowSize(snapshot: WindowSizeSnapshot | null): Promise<void> {
+  if (!snapshot) return;
+  try {
+    await getCurrentWindow().setSize(new LogicalSize(snapshot.width, snapshot.height));
+  } catch {
+    // Browser preview mode.
+  }
+}
+
 export async function getCurrentAppVersion(): Promise<string> {
   try {
     return await getVersion();
   } catch {
-    return "0.1.18";
+    return "0.1.19";
   }
 }
 
