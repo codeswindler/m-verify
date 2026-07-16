@@ -91,9 +91,7 @@ Push-Location $repoRoot
 try {
   & pnpm --filter "@m-verify/shared" build
   Assert-LastCommand "Shared package build"
-  & pnpm --filter "@m-verify/desktop" build:web
-  Assert-LastCommand "Desktop web build"
-  & cargo build --release --manifest-path (Join-Path $tauriRoot "Cargo.toml")
+  & pnpm --filter "@m-verify/desktop" exec tauri build --no-bundle
   Assert-LastCommand "Tauri release build"
 } finally {
   Pop-Location
@@ -110,6 +108,22 @@ $executablePath = Join-Path $cargoTarget "release\m-verify.exe"
 if (-not (Test-Path $executablePath)) {
   throw "The Store executable was not produced at $executablePath."
 }
+
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+$dumpbinPath = $null
+if (Test-Path $vswhere) {
+  $dumpbinPath = & $vswhere -latest -products * -find "VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
+    Select-Object -First 1
+}
+if ($dumpbinPath) {
+  $dependencies = (& $dumpbinPath /dependents $executablePath) -join "`n"
+  if ($dependencies -match '(?im)^\s*(VCRUNTIME|MSVCP)\d[^\s]*\.dll\s*$') {
+    throw "The Store executable still depends on a Visual C++ runtime DLL. Build it with the static CRT before packaging."
+  }
+} else {
+  Write-Warning "DumpBin was not found, so executable runtime dependencies were not verified."
+}
+
 Copy-Item $executablePath (Join-Path $packageRoot "m-verify.exe")
 
 $manifest = (Get-Content $manifestTemplatePath -Raw).Replace("{{VERSION}}", $storeVersion)
