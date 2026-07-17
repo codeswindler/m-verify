@@ -39,6 +39,14 @@ export async function hideWindow(): Promise<void> {
   }
 }
 
+export async function minimizeWindow(): Promise<void> {
+  try {
+    await getCurrentWindow().minimize();
+  } catch {
+    // Browser preview mode.
+  }
+}
+
 export async function setAlwaysOnTop(value: boolean): Promise<void> {
   try {
     await getCurrentWindow().setAlwaysOnTop(value);
@@ -87,7 +95,7 @@ export async function getCurrentAppVersion(): Promise<string> {
   try {
     return await getVersion();
   } catch {
-    return "0.1.20";
+    return "0.1.23";
   }
 }
 

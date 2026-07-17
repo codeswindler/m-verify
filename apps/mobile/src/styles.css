@@ -571,6 +571,12 @@ dl {
   gap: 0.55rem;
 }
 
+.selected-payment-inline {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.1rem 0 0.3rem;
+}
+
 .empty-state {
   border: 1px dashed rgba(255, 255, 255, 0.14);
   border-radius: var(--r);

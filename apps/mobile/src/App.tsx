@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -665,13 +665,13 @@ function VerifyScreen({
     };
   }, [query, token]);
 
-  async function verifySelected() {
-    if (!selectedPayment) return;
+  async function verifySelected(target: PaymentSummary | null | undefined = selectedPayment) {
+    if (!target) return;
     setVerifying(true);
     setError("");
     setResult(null);
     try {
-      const response = await api.verifyPayment(token, { paymentId: selectedPayment.id });
+      const response = await api.verifyPayment(token, { paymentId: target.id });
       setResult(response);
       if (response.payment) {
         setSelectedPayment(response.payment);
@@ -818,89 +818,91 @@ function VerifyScreen({
         {query.trim() && searching ? <EmptyState text="Searching payments..." /> : null}
         {query.trim() && !searching && !payments.length ? <EmptyState text="No received payments found." /> : null}
         {payments.map((payment) => (
-          <button
-            className={selectedPayment?.id === payment.id ? "payment-option selected" : "payment-option"}
-            key={payment.id}
-            onClick={() => {
-              setSelectedPayment(payment);
-              setResult(null);
-            }}
-            type="button"
-          >
-            <span className="option-main">
-              <strong>{paymentName(payment)}</strong>
-              <small>{payment.transactionCode} - {payment.reference || "No reference"}</small>
-            </span>
-            <span className="option-side">
-              <strong>{money(payment.amount)}</strong>
-              <small>{payment.verifiedStatus ? "Verified" : dateTime(payment.paymentTime)}</small>
-            </span>
-          </button>
+          <Fragment key={payment.id}>
+            <button
+              className={selectedPayment?.id === payment.id ? "payment-option selected" : "payment-option"}
+              onClick={() => {
+                setSelectedPayment(payment);
+                setResult(null);
+              }}
+              type="button"
+            >
+              <span className="option-main">
+                <strong>{paymentName(payment)}</strong>
+                <small>{payment.transactionCode} - {payment.reference || "No reference"}</small>
+              </span>
+              <span className="option-side">
+                <strong>{money(payment.amount)}</strong>
+                <small>{payment.verifiedStatus ? "Verified" : dateTime(payment.paymentTime)}</small>
+              </span>
+            </button>
+            {selectedPayment?.id === payment.id ? (
+              <div className="selected-payment-inline">
+                <section className="selected-payment">
+                  <div className="section-heading compact">
+                    <div>
+                      <p className="eyebrow">Selected receipt</p>
+                      <h2>{paymentName(selectedPayment)}</h2>
+                    </div>
+                    <span className={selectedPayment.verifiedStatus ? "status-pill verified" : "status-pill pending"}>
+                      {selectedPayment.verifiedStatus ? "Verified" : "Ready"}
+                    </span>
+                  </div>
+                  <dl className="detail-grid">
+                    <div>
+                      <dt>Amount</dt>
+                      <dd>{money(selectedPayment.amount)}</dd>
+                    </div>
+                    <div>
+                      <dt>Code</dt>
+                      <dd>{selectedPayment.transactionCode}</dd>
+                    </div>
+                    <div>
+                      <dt>Phone</dt>
+                      <dd>{selectedPayment.phoneNumber}</dd>
+                    </div>
+                    <div>
+                      <dt>Received</dt>
+                      <dd>{dateTime(selectedPayment.paymentTime)}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <button
+                  className="primary-button verify-button"
+                  disabled={selectedPayment.verifiedStatus || verifying}
+                  onClick={() => void verifySelected()}
+                  type="button"
+                >
+                  {verifying ? <Loader2 className="spin" size={19} /> : <ShieldCheck size={19} />}
+                  {verifying ? "Verifying" : selectedPayment.verifiedStatus ? "Already verified" : "Verify selected payment"}
+                </button>
+                {selectedPayment.verifiedStatus ? (
+                  <button className="secondary-action" type="button" onClick={() => onReceipt(selectedPayment)}><Printer size={18} /> Print receipt</button>
+                ) : null}
+
+                {error ? (
+                  <div className="inline-error">
+                    <AlertTriangle size={16} />
+                    <span>{error}</span>
+                  </div>
+                ) : null}
+
+                {result ? (
+                  <section className={`result-card result-${resultTone(result.result)}`}>
+                    {result.result === "VERIFIED" || result.result === "ALREADY_VERIFIED" ? <CheckCircle2 size={22} /> : <XCircle size={22} />}
+                    <div>
+                      <strong>{result.result.replace(/_/g, " ")}</strong>
+                      <span>{result.message}</span>
+                    </div>
+                    {result.payment?.verifiedStatus ? <button type="button" onClick={() => onReceipt(result.payment!)} aria-label="Print verified payment receipt"><Printer size={18} /></button> : null}
+                  </section>
+                ) : null}
+              </div>
+            ) : null}
+          </Fragment>
         ))}
       </div>
-
-      {selectedPayment ? (
-        <section className="selected-payment">
-          <div className="section-heading compact">
-            <div>
-              <p className="eyebrow">Selected receipt</p>
-              <h2>{paymentName(selectedPayment)}</h2>
-            </div>
-            <span className={selectedPayment.verifiedStatus ? "status-pill verified" : "status-pill pending"}>
-              {selectedPayment.verifiedStatus ? "Verified" : "Ready"}
-            </span>
-          </div>
-          <dl className="detail-grid">
-            <div>
-              <dt>Amount</dt>
-              <dd>{money(selectedPayment.amount)}</dd>
-            </div>
-            <div>
-              <dt>Code</dt>
-              <dd>{selectedPayment.transactionCode}</dd>
-            </div>
-            <div>
-              <dt>Phone</dt>
-              <dd>{selectedPayment.phoneNumber}</dd>
-            </div>
-            <div>
-              <dt>Received</dt>
-              <dd>{dateTime(selectedPayment.paymentTime)}</dd>
-            </div>
-          </dl>
-        </section>
-      ) : null}
-
-      <button
-        className="primary-button verify-button"
-        disabled={!selectedPayment || selectedPayment.verifiedStatus || verifying}
-        onClick={() => void verifySelected()}
-        type="button"
-      >
-        {verifying ? <Loader2 className="spin" size={19} /> : <ShieldCheck size={19} />}
-        {verifying ? "Verifying" : selectedPayment?.verifiedStatus ? "Already verified" : "Verify selected payment"}
-      </button>
-      {selectedPayment?.verifiedStatus ? (
-        <button className="secondary-action" type="button" onClick={() => onReceipt(selectedPayment)}><Printer size={18} /> Print receipt</button>
-      ) : null}
-
-      {error ? (
-        <div className="inline-error">
-          <AlertTriangle size={16} />
-          <span>{error}</span>
-        </div>
-      ) : null}
-
-      {result ? (
-        <section className={`result-card result-${resultTone(result.result)}`}>
-          {result.result === "VERIFIED" || result.result === "ALREADY_VERIFIED" ? <CheckCircle2 size={22} /> : <XCircle size={22} />}
-          <div>
-            <strong>{result.result.replace(/_/g, " ")}</strong>
-            <span>{result.message}</span>
-          </div>
-          {result.payment?.verifiedStatus ? <button type="button" onClick={() => onReceipt(result.payment!)} aria-label="Print verified payment receipt"><Printer size={18} /></button> : null}
-        </section>
-      ) : null}
 
       {(stkLoading || stkPrompt || stkFlowError) ? (
         <div className="stk-flow-backdrop" role="dialog" aria-modal="true" aria-label="M-Pesa STK payment status">
@@ -942,7 +944,7 @@ function VerifyScreen({
                   <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
                   <div><span>Received</span><strong>{dateTime(stkPayment.paymentTime)}</strong></div>
                 </div>
-                <button className="primary-button" type="button" onClick={() => void verifySelected()} disabled={verifying || stkPayment.verifiedStatus}>
+                <button className="primary-button" type="button" onClick={() => void verifySelected(stkPayment)} disabled={verifying || stkPayment.verifiedStatus}>
                   {verifying && <Loader2 className="spin" size={18} />}
                   {verifying ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>

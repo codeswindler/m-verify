@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   BarChart3,
   CheckCircle2,
@@ -36,7 +36,7 @@ import {
   enableAutostartOnce,
   expandWindowForReceipt,
   getCurrentAppVersion,
-  hideWindow,
+  minimizeWindow,
   installNativeUpdate,
   isMicrosoftStoreBuild,
   openExternalUrl,
@@ -190,7 +190,7 @@ function Titlebar({
             {alwaysTop ? <Pin size={15} /> : <PinOff size={15} />}
           </button>
         )}
-        <button type="button" className="icon-button" onClick={() => void hideWindow()} title="Minimize to tray">
+        <button type="button" className="icon-button" onClick={() => void minimizeWindow()} title="Minimize">
           <Minus size={16} />
         </button>
         {auth && onLogout && (
@@ -424,14 +424,14 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
     };
   }, [auth.accessToken, query]);
 
-  async function verifySelected() {
-    if (!selectedPayment) return;
+  async function verifySelected(target: PaymentSummary | null | undefined = selectedPayment) {
+    if (!target) return;
     setLoading(true);
     setError("");
     setResult(null);
     try {
       const response = await api.verifyPayment(auth.accessToken, {
-        paymentId: selectedPayment.id
+        paymentId: target.id
       });
       setResult(response);
       if (response.payment) {
@@ -572,105 +572,107 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
         {query.trim() && searching && <div className="empty-state">Searching payments...</div>}
         {query.trim() && !searching && !payments.length && <div className="empty-state">No received payments found.</div>}
         {payments.map((payment) => (
-          <button
-            type="button"
-            className={`payment-option ${selectedPayment?.id === payment.id ? "selected" : ""}`}
-            key={payment.id}
-            onClick={() => {
-              setSelectedPayment(payment);
-              setResult(null);
-            }}
-          >
-            <div>
-              <strong>{payment.customerName || "M-Pesa customer"}</strong>
-              <span>{payment.transactionCode} - {payment.reference ?? "No reference"}</span>
-            </div>
-            <div className="payment-option-right">
-              <strong>KES {formatAmount(payment.amount)}</strong>
-              <span>{payment.verifiedStatus ? "Verified" : formatDate(payment.paymentTime)}</span>
-            </div>
-          </button>
+          <Fragment key={payment.id}>
+            <button
+              type="button"
+              className={`payment-option ${selectedPayment?.id === payment.id ? "selected" : ""}`}
+              onClick={() => {
+                setSelectedPayment(payment);
+                setResult(null);
+              }}
+            >
+              <div>
+                <strong>{payment.customerName || "M-Pesa customer"}</strong>
+                <span>{payment.transactionCode} - {payment.reference ?? "No reference"}</span>
+              </div>
+              <div className="payment-option-right">
+                <strong>KES {formatAmount(payment.amount)}</strong>
+                <span>{payment.verifiedStatus ? "Verified" : formatDate(payment.paymentTime)}</span>
+              </div>
+            </button>
+            {selectedPayment?.id === payment.id && (
+              <div className="selected-payment-inline">
+                <div className="selected-payment">
+                  <div className="selected-payment-head">
+                    <strong>Selected payment</strong>
+                    <span>{selectedPayment.verifiedStatus ? "Already verified" : "Ready to verify"}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Customer</dt>
+                      <dd>{selectedPayment.customerName ?? "M-Pesa customer"}</dd>
+                    </div>
+                    <div>
+                      <dt>Code</dt>
+                      <dd>{selectedPayment.transactionCode}</dd>
+                    </div>
+                    <div>
+                      <dt>Amount</dt>
+                      <dd>KES {formatAmount(selectedPayment.amount)}</dd>
+                    </div>
+                    <div>
+                      <dt>Phone</dt>
+                      <dd>{selectedPayment.phoneNumber}</dd>
+                    </div>
+                    <div>
+                      <dt>Reference</dt>
+                      <dd>{selectedPayment.reference ?? "-"}</dd>
+                    </div>
+                    <div>
+                      <dt>Received</dt>
+                      <dd>{formatDate(selectedPayment.paymentTime)}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <button
+                  className="primary verify-button"
+                  type="button"
+                  onClick={() => void verifySelected()}
+                  disabled={loading || selectedPayment.verifiedStatus}
+                >
+                  {loading && <Loader2 className="spin" size={16} />}
+                  {loading ? "Verifying" : selectedPayment.verifiedStatus ? "Already verified" : "Verify selected payment"}
+                </button>
+                {selectedPayment.verifiedStatus && (
+                  <button className="small-button receipt-action" type="button" onClick={() => setReceiptPayment(selectedPayment)}>
+                    <Printer size={15} /> Print receipt
+                  </button>
+                )}
+
+                {error && <div className="error">{error}</div>}
+                {result && (
+                  <div className={`result result-${resultTone(result.result)}`}>
+                    <strong>{result.result}</strong>
+                    <span>{result.message}</span>
+                    {result.payment && (
+                      <dl>
+                        <div>
+                          <dt>Code</dt>
+                          <dd>{result.payment.transactionCode}</dd>
+                        </div>
+                        <div>
+                          <dt>Amount</dt>
+                          <dd>KES {result.payment.amount}</dd>
+                        </div>
+                        <div>
+                          <dt>Phone</dt>
+                          <dd>{result.payment.phoneNumber}</dd>
+                        </div>
+                      </dl>
+                    )}
+                    {result.payment?.verifiedStatus && (
+                      <button className="small-button receipt-action" type="button" onClick={() => setReceiptPayment(result.payment!)}>
+                        <Printer size={15} /> Print receipt
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </Fragment>
         ))}
       </div>
-
-      {selectedPayment && (
-        <div className="selected-payment">
-          <div className="selected-payment-head">
-            <strong>Selected payment</strong>
-            <span>{selectedPayment.verifiedStatus ? "Already verified" : "Ready to verify"}</span>
-          </div>
-          <dl>
-            <div>
-              <dt>Customer</dt>
-              <dd>{selectedPayment.customerName ?? "M-Pesa customer"}</dd>
-            </div>
-            <div>
-              <dt>Code</dt>
-              <dd>{selectedPayment.transactionCode}</dd>
-            </div>
-            <div>
-              <dt>Amount</dt>
-              <dd>KES {formatAmount(selectedPayment.amount)}</dd>
-            </div>
-            <div>
-              <dt>Phone</dt>
-              <dd>{selectedPayment.phoneNumber}</dd>
-            </div>
-            <div>
-              <dt>Reference</dt>
-              <dd>{selectedPayment.reference ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>Received</dt>
-              <dd>{formatDate(selectedPayment.paymentTime)}</dd>
-            </div>
-          </dl>
-        </div>
-      )}
-
-      <button
-        className="primary verify-button"
-        type="button"
-        onClick={() => void verifySelected()}
-        disabled={loading || !selectedPayment || selectedPayment.verifiedStatus}
-      >
-        {loading && <Loader2 className="spin" size={16} />}
-        {loading ? "Verifying" : selectedPayment?.verifiedStatus ? "Already verified" : "Verify selected payment"}
-      </button>
-      {selectedPayment?.verifiedStatus && (
-        <button className="small-button receipt-action" type="button" onClick={() => setReceiptPayment(selectedPayment)}>
-          <Printer size={15} /> Print receipt
-        </button>
-      )}
-
-      {error && <div className="error">{error}</div>}
-      {result && (
-        <div className={`result result-${resultTone(result.result)}`}>
-          <strong>{result.result}</strong>
-          <span>{result.message}</span>
-          {result.payment && (
-            <dl>
-              <div>
-                <dt>Code</dt>
-                <dd>{result.payment.transactionCode}</dd>
-              </div>
-              <div>
-                <dt>Amount</dt>
-                <dd>KES {result.payment.amount}</dd>
-              </div>
-              <div>
-                <dt>Phone</dt>
-                <dd>{result.payment.phoneNumber}</dd>
-              </div>
-            </dl>
-          )}
-          {result.payment?.verifiedStatus && (
-            <button className="small-button receipt-action" type="button" onClick={() => setReceiptPayment(result.payment!)}>
-              <Printer size={15} /> Print receipt
-            </button>
-          )}
-        </div>
-      )}
 
       {(stkLoading || stkPrompt || stkFlowError) && (
         <div className="stk-flow-backdrop" role="dialog" aria-modal="true" aria-label="M-Pesa STK payment status">
@@ -723,7 +725,7 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
                   <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
                   <div><span>Received</span><strong>{formatDate(stkPayment.paymentTime)}</strong></div>
                 </div>
-                <button className="primary" type="button" onClick={() => void verifySelected()} disabled={loading || stkPayment.verifiedStatus}>
+                <button className="primary" type="button" onClick={() => void verifySelected(stkPayment)} disabled={loading || stkPayment.verifiedStatus}>
                   {loading && <Loader2 className="spin" size={16} />}
                   {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>

@@ -132,7 +132,7 @@ Install the Tauri Windows prerequisites first, then run:
 
 ```powershell
 pnpm install
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH="$env:USERPROFILE\.tauri\m-verify.key"
+$env:TAURI_SIGNING_PRIVATE_KEY="$env:USERPROFILE\.tauri\m-verify.key"
 pnpm --filter @m-verify/desktop tauri:build
 ```
 

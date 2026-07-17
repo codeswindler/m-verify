@@ -1,6 +1,6 @@
 [package]
 name = "m-verify"
-version = "0.1.20"
+version = "0.1.23"
 description = "Standalone M-Pesa payment verification desktop app."
 authors = ["M-Verify"]
 edition = "2021"

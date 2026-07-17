@@ -696,6 +696,12 @@ input:focus {
   justify-items: end;
 }
 
+.selected-payment-inline {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
 .selected-payment {
   border: 1px solid #b9d8c6;
   border-radius: 8px;

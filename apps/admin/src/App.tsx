@@ -1215,13 +1215,13 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
     };
   }, [token, query, notify]);
 
-  async function verifySelectedPayment() {
-    if (!selectedPayment) return;
+  async function verifySelectedPayment(target: PaymentSummary | null | undefined = selectedPayment) {
+    if (!target) return;
     setError("");
     setResult(null);
     setLoading(true);
     try {
-      const verification = await api.verifyPayment(token, { paymentId: selectedPayment.id });
+      const verification = await api.verifyPayment(token, { paymentId: target.id });
       setResult(verification);
       notify(
         verification.result === "VERIFIED" ? "Payment verified" : verification.result.replace(/_/g, " "),
@@ -1455,7 +1455,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
                   <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
                   <div><span>Received</span><strong>{formatDate(stkPayment.paymentTime)}</strong></div>
                 </div>
-                <button className="primary" type="button" onClick={() => void verifySelectedPayment()} disabled={loading || stkPayment.verifiedStatus}>
+                <button className="primary" type="button" onClick={() => void verifySelectedPayment(stkPayment)} disabled={loading || stkPayment.verifiedStatus}>
                   {loading && <Loader2 className="spin" size={17} />}
                   {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>
