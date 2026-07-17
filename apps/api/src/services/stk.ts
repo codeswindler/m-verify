@@ -331,13 +331,20 @@ async function queryDarajaStatus(row: StkRequestRow): Promise<void> {
   });
   const body = await readDarajaJson(response);
   const resultCode = body.ResultCode === undefined ? null : String(body.ResultCode);
-  if (resultCode && resultCode !== "0" && !deferredProviderTimeoutCodes.has(resultCode)) {
+  const description = String(body.ResultDesc ?? body.errorMessage ?? "");
+  // Safaricom returns a transient "still being processed" response when the status query
+  // runs before the customer finishes entering their PIN. That is NOT a failure — leave the
+  // prompt PENDING so polling continues until the real callback or the expires_at timeout.
+  const stillProcessing =
+    /processing|being processed|under processing|in progress|initiator information|500\.001\.1001/i.test(description) ||
+    (body.errorCode ? /500\.001\.1001/.test(String(body.errorCode)) : false);
+  if (resultCode && resultCode !== "0" && !deferredProviderTimeoutCodes.has(resultCode) && !stillProcessing) {
     const status: StkPromptStatus = resultCode === "1032" ? "CANCELLED" : "FAILED";
     await pool.execute(
       `UPDATE stk_prompt_requests
        SET status = ?, result_code = ?, result_description = ?, raw_result_json = ?, completed_at = UTC_TIMESTAMP()
        WHERE id = ? AND status IN ('REQUESTED', 'PENDING')`,
-      [status, resultCode, String(body.ResultDesc ?? body.errorMessage ?? "STK prompt failed."), JSON.stringify(body), row.id]
+      [status, resultCode, description || "STK prompt failed.", JSON.stringify(body), row.id]
     );
   }
 }
