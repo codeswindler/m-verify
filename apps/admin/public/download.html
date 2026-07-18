@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get M-Verify</title>
+  <meta name="description" content="Download M-Verify for Windows and Android, or get it from the Microsoft Store and Google Play." />
+  <style>
+    :root {
+      --green: #237a4b;
+      --green-dark: #185c38;
+      --green-light: #79e2a5;
+      --ink: #12261c;
+      --muted: #5f7068;
+      --card: #ffffff;
+      --line: #dbe4de;
+      --bg: #f4fbf7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 500px at 50% -10%, #e8f5ee, var(--bg));
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 64px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .brand svg { color: var(--green); }
+    .brand h1 { font-size: 30px; letter-spacing: -0.5px; }
+    .tagline { color: var(--muted); font-size: 16px; text-align: center; max-width: 520px; margin-bottom: 36px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      width: 100%;
+      max-width: 760px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(24,92,56,.12); border-color: var(--green-light); }
+    .card-top { display: flex; align-items: center; gap: 12px; }
+    .platform-icon { width: 40px; height: 40px; flex: none; color: var(--green); }
+    .card h2 { font-size: 17px; }
+    .card p { color: var(--muted); font-size: 13px; line-height: 1.5; flex: 1; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      background: var(--green); color: #fff; text-decoration: none;
+      border-radius: 9px; padding: 11px 14px; font-size: 14px; font-weight: 700;
+    }
+    .btn:hover { background: var(--green-dark); }
+    .btn.ghost { background: transparent; color: var(--green); border: 1px solid var(--green); }
+    .btn.ghost:hover { background: #eef8f2; }
+    .note { color: var(--muted); font-size: 12px; margin-top: 40px; text-align: center; max-width: 560px; line-height: 1.6; }
+    footer { margin-top: 22px; color: var(--muted); font-size: 12px; }
+    footer a { color: var(--green); }
+  </style>
+</head>
+<body>
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+    <h1>M-Verify</h1>
+  </div>
+  <p class="tagline">Confirm M-Pesa payments against live records in seconds. Choose your platform below.</p>
+
+  <div class="grid">
+    <!-- Windows direct -->
+    <div class="card">
+      <div class="card-top">
+        <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.4v7.1H3V5.5zM10.5 12.5v7.1L3 18.5v-6h7.5zM11.5 4.25 21 3v8.5h-9.5V4.25zM21 12.5V21l-9.5-1.25V12.5H21z"/></svg>
+        <h2>Windows</h2>
+      </div>
+      <p>Desktop app for the floating verifier window. Installs in seconds and updates itself.</p>
+      <a class="btn" href="/downloads/M-Verify-Setup.exe">Download for Windows (.exe)</a>
+      <a class="btn ghost" href="https://apps.microsoft.com/detail/9NB6KLQG3DPM" target="_blank" rel="noopener">Get it on the Microsoft Store</a>
+    </div>
+
+    <!-- Android -->
+    <div class="card">
+      <div class="card-top">
+        <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48 19 7.05a.5.5 0 0 0-.87-.5l-1.42 2.46A9.9 9.9 0 0 0 12 8c-1.66 0-3.22.42-4.71 1.01L5.87 6.55a.5.5 0 1 0-.87.5l1.4 2.43A8.2 8.2 0 0 0 2.5 16h19a8.2 8.2 0 0 0-3.9-6.52zM8 13.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm8 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+        <h2>Android</h2>
+      </div>
+      <p>Phone and tablet app with the same verification and receipts. Install directly or get it on Google Play.</p>
+      <a class="btn" href="/downloads/M-Verify.apk">Download APK</a>
+      <a class="btn ghost" href="https://play.google.com/store/apps/details?id=ke.co.mverify.mobile" target="_blank" rel="noopener">Get it on Google Play</a>
+    </div>
+  </div>
+
+  <p class="note">
+    Installing the Android APK directly? Your phone may ask you to allow installs from your browser or Files app the first time — that's expected for apps installed outside Google Play. The Microsoft Store and Google Play listings become available once the app is published there.
+  </p>
+  <footer>&copy; M-Verify &middot; <a href="/privacy.html">Privacy policy</a></footer>
+</body>
+</html>

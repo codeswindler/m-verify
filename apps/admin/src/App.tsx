@@ -163,9 +163,9 @@ function LoginView({ onLogin }: { onLogin: (auth: AuthResponse) => void }) {
           </div>
           {error && <div className="error">{error}</div>}
           <button className="primary login-sign-btn" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
-          <a className="desktop-download-link" href={desktopDownloadUrl} download>
+          <a className="desktop-download-link" href="/download.html">
             <WindowsMark />
-            Download Windows App
+            Get the app — Windows &amp; Android
           </a>
         </form>
       </div>
