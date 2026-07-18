@@ -75,6 +75,7 @@ export type PaymentSummary = {
   tenantName: string | null;
   customerName: string | null;
   reference: string | null;
+  billNumber: string | null;
   phoneNumber: string;
   transactionCode: string;
   amount: string;
@@ -179,7 +180,8 @@ export const verifyPaymentSchema = z.object({
   phoneNumber: z.string().trim().min(7).max(120).optional().or(z.literal("")),
   transactionCode: z.string().trim().min(4).max(40).optional().or(z.literal("")),
   amount: optionalAmountSchema,
-  reference: z.string().trim().max(120).optional().or(z.literal(""))
+  reference: z.string().trim().max(120).optional().or(z.literal("")),
+  billNumber: z.string().trim().max(60).optional().or(z.literal(""))
 }).refine((value) => Boolean(value.paymentId || value.phoneNumber || value.transactionCode || value.reference), {
   message: "Select a payment or provide a phone number, M-Pesa code, or reference code"
 });
@@ -226,6 +228,7 @@ export const listQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(25),
   search: z.string().trim().max(120).optional(),
   status: z.string().trim().max(40).optional(),
+  verifiedBy: z.coerce.number().int().positive().optional(),
   tenantId: z.coerce.number().int().positive().optional()
 });
 

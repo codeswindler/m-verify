@@ -11,6 +11,7 @@ const receipt: PaymentReceipt = {
     tenantName: "Test & Club",
     customerName: "A <Customer>",
     reference: "Table 7",
+    billNumber: "B-7",
     phoneNumber: "2547***123",
     transactionCode: "TST123ABC",
     amount: "15.00",

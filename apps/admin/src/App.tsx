@@ -1087,16 +1087,25 @@ function PaymentDetailModal({ payment, onClose, onReceipt }: { payment: PaymentS
 
 function TransactionsView({ token, notify }: { token: string; notify: Notify }) {
   const [search, setSearch] = useState("");
+  const [waiterId, setWaiterId] = useState("");
+  const [waiters, setWaiters] = useState<AdminUser[]>([]);
   const [result, setResult] = useState<PaginatedResponse<PaymentSummary> | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
   const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const params = useMemo(() => {
-    const query = new URLSearchParams({ page: "1", limit: "25" });
+    const query = new URLSearchParams({ page: "1", limit: "50" });
     if (search) query.set("search", search);
+    if (waiterId) query.set("verifiedBy", waiterId);
     return query;
-  }, [search]);
+  }, [search, waiterId]);
+
+  useEffect(() => {
+    api.listUsers(token)
+      .then((response) => setWaiters(response.data.filter((user) => user.role !== "admin")))
+      .catch(() => undefined);
+  }, [token]);
 
   async function load(showNotice = false) {
     setLoading(true);
@@ -1124,25 +1133,28 @@ function TransactionsView({ token, notify }: { token: string; notify: Notify }) 
       </div>
       <section className="panel">
         <div className="toolbar">
-          <div className="searchbox"><Search size={15} /><input placeholder="Search name, reference, code, or phone" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+          <div className="searchbox"><Search size={15} /><input placeholder="Search bill no., name, amount, reference, code" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+          <select value={waiterId} onChange={(event) => setWaiterId(event.target.value)}>
+            <option value="">All staff</option>
+            {waiters.map((waiter) => <option key={waiter.id} value={String(waiter.id)}>{waiter.fullName}</option>)}
+          </select>
           <button onClick={() => void load(true)} disabled={loading}><RefreshCw size={14} /> Refresh</button>
           <button onClick={() => { downloadCsv(token, `/transactions/export.csv?${params.toString()}`); notify("CSV export started", "Your transactions report is downloading.", "info"); }}><Download size={14} /> Export CSV</button>
         </div>
         {error && <div className="error">{error}</div>}
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Customer</th><th>Reference</th><th>Transaction Code</th><th>Amount</th><th>Received</th><th>Verified</th><th>Payment Time</th><th>Verified By</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Customer</th><th>Bill No.</th><th>Amount</th><th>Transaction Code</th><th>Verified</th><th>Waiter</th><th>Payment Time</th><th>Actions</th></tr></thead>
             <tbody>
               {!rows.length ? <EmptyRow label="No transactions found" /> : rows.map((payment) => (
                 <tr key={payment.id}>
                   <td><strong>{payment.customerName ?? payment.phoneNumber}</strong><span className="subtext">{payment.customerName ? payment.phoneNumber : "M-Pesa payer"}</span></td>
-                  <td>{payment.reference ?? "-"}</td>
-                  <td><span className="mono">{payment.transactionCode}</span></td>
+                  <td>{payment.billNumber ?? "-"}</td>
                   <td className="cell-amount">KES {formatAmount(payment.amount)}</td>
-                  <td><StatusBadge value="PAID" /></td>
+                  <td><span className="mono">{payment.transactionCode}</span></td>
                   <td><span className={payment.verifiedStatus ? "cell-success" : "cell-muted-s"}>{payment.verifiedStatus ? "Yes" : "No"}</span></td>
+                  <td className="cell-muted">{payment.verifiedBy?.fullName ?? "-"}</td>
                   <td className="cell-muted">{formatDate(payment.paymentTime)}</td>
-                  <td className="cell-muted">{payment.verifiedBy?.username ?? "-"}</td>
                   <td className="actions">
                     <button type="button" onClick={() => setSelectedPayment(payment)}><Eye size={13} /> View</button>
                     {payment.verifiedStatus && <button type="button" onClick={() => setReceiptPayment(payment)}><Printer size={13} /> Receipt</button>}
@@ -1163,6 +1175,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
   const [query, setQuery] = useState("");
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [billNumber, setBillNumber] = useState("");
   const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
@@ -1217,11 +1230,17 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
 
   async function verifySelectedPayment(target: PaymentSummary | null | undefined = selectedPayment) {
     if (!target) return;
+    const bill = billNumber.trim();
+    if (!bill) {
+      setError("Enter a bill number before verifying.");
+      notify("Bill number required", "Enter a bill number before verifying.", "error");
+      return;
+    }
     setError("");
     setResult(null);
     setLoading(true);
     try {
-      const verification = await api.verifyPayment(token, { paymentId: target.id });
+      const verification = await api.verifyPayment(token, { paymentId: target.id, billNumber: bill });
       setResult(verification);
       notify(
         verification.result === "VERIFIED" ? "Payment verified" : verification.result.replace(/_/g, " "),
@@ -1231,6 +1250,7 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
       if (verification.payment) {
         setSelectedPayment(verification.payment);
         setPayments((current) => current.map((payment) => payment.id === verification.payment!.id ? verification.payment! : payment));
+        if (verification.result === "VERIFIED") setBillNumber("");
       }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : "Verification failed";
@@ -1395,8 +1415,15 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
                   <div><dt>Phone</dt><dd>{selectedPayment.phoneNumber}</dd></div>
                   <div><dt>Received at</dt><dd>{formatDate(selectedPayment.paymentTime)}</dd></div>
                   <div><dt>Formal verification</dt><dd>{selectedPayment.verifiedStatus ? `Verified by ${selectedPayment.verifiedBy?.username ?? "staff"}` : "Not yet verified"}</dd></div>
+                  {selectedPayment.verifiedStatus && <div><dt>Bill number</dt><dd>{selectedPayment.billNumber ?? "-"}</dd></div>}
                 </dl>
-                <button className="primary" type="button" onClick={() => void verifySelectedPayment()} disabled={loading || selectedPayment.verifiedStatus}>
+                {!selectedPayment.verifiedStatus && (
+                  <label className="bill-field">
+                    Bill number
+                    <input value={billNumber} onChange={(event) => setBillNumber(event.target.value)} placeholder="e.g. table/tab/bill no." maxLength={60} />
+                  </label>
+                )}
+                <button className="primary" type="button" onClick={() => void verifySelectedPayment()} disabled={loading || selectedPayment.verifiedStatus || !billNumber.trim()}>
                   {loading ? "Verifying..." : selectedPayment.verifiedStatus ? "Already verified" : "Verify selected payment"}
                 </button>
                 {selectedPayment.verifiedStatus && <button type="button" onClick={() => setReceiptPayment(selectedPayment)}><Printer size={15} /> Print receipt</button>}
@@ -1455,7 +1482,13 @@ function VerifyView({ token, notify }: { token: string; notify: Notify }) {
                   <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
                   <div><span>Received</span><strong>{formatDate(stkPayment.paymentTime)}</strong></div>
                 </div>
-                <button className="primary" type="button" onClick={() => void verifySelectedPayment(stkPayment)} disabled={loading || stkPayment.verifiedStatus}>
+                {!stkPayment.verifiedStatus && (
+                  <label className="bill-field">
+                    Bill number
+                    <input value={billNumber} onChange={(event) => setBillNumber(event.target.value)} placeholder="e.g. table/tab/bill no." maxLength={60} />
+                  </label>
+                )}
+                <button className="primary" type="button" onClick={() => void verifySelectedPayment(stkPayment)} disabled={loading || stkPayment.verifiedStatus || !billNumber.trim()}>
                   {loading && <Loader2 className="spin" size={17} />}
                   {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>

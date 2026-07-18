@@ -108,7 +108,7 @@ export const api = {
   },
   verifyPayment(
     token: string,
-    payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }
+    payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string; billNumber?: string }
   ) {
     return request<VerificationResponse>("/verify-payment", { method: "POST", token, body: payload });
   },

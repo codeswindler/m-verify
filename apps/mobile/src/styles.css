@@ -577,6 +577,27 @@ dl {
   margin: 0.1rem 0 0.3rem;
 }
 
+.bill-field {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.bill-field input {
+  font-weight: 500;
+}
+
+.bill-chip {
+  align-self: start;
+  background: #e8f5ee;
+  color: #1f7a46;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
 .empty-state {
   border: 1px dashed rgba(255, 255, 255, 0.14);
   border-radius: var(--r);

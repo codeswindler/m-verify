@@ -26,6 +26,7 @@ type PaymentRow = RowDataPacket & {
   tenant_name: string | null;
   customer_name: string | null;
   reference: string | null;
+  bill_number: string | null;
   phone_number: string;
   transaction_code: string;
   amount: string;
@@ -51,6 +52,7 @@ function mapPayment(row: PaymentRow): PaymentSummary {
     tenantName: row.tenant_name,
     customerName: row.customer_name,
     reference: row.reference,
+    billNumber: row.bill_number,
     phoneNumber: maskPhoneNumber(row.phone_number),
     transactionCode: row.transaction_code,
     amount: String(row.amount),
@@ -111,7 +113,7 @@ businessRouter.get(
     const [paymentRows] = await pool.execute<PaymentRow[]>(
       `SELECT
         p.id, p.tenant_id, t.name AS tenant_name,
-        p.customer_name, p.reference, p.phone_number, p.transaction_code, p.amount,
+        p.customer_name, p.reference, p.bill_number, p.phone_number, p.transaction_code, p.amount,
         p.payment_channel, p.status, p.payment_time, p.verified_status, p.verified_at,
         u.id AS verified_by_id, u.username AS verified_by_username,
         u.full_name AS verified_by_full_name, u.role AS verified_by_role

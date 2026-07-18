@@ -581,7 +581,8 @@ function VerifiedSaleCard({ payment, onReceipt }: { payment: PaymentSummary; onR
           <strong>{money(payment.amount)}</strong>
         </div>
         <div className="payment-meta">
-          <span>{payment.transactionCode}</span>
+          {payment.billNumber ? <span>Bill {payment.billNumber}</span> : <span>{payment.transactionCode}</span>}
+          {payment.verifiedBy ? <span>{payment.verifiedBy.fullName}</span> : null}
           <span>Verified {dateTime(payment.verifiedAt ?? payment.paymentTime)}</span>
         </div>
       </div>
@@ -616,6 +617,7 @@ function VerifyScreen({
   const [query, setQuery] = useState("");
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [billNumber, setBillNumber] = useState("");
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
@@ -667,16 +669,22 @@ function VerifyScreen({
 
   async function verifySelected(target: PaymentSummary | null | undefined = selectedPayment) {
     if (!target) return;
+    const bill = billNumber.trim();
+    if (!bill) {
+      setError("Enter a bill number before verifying.");
+      return;
+    }
     setVerifying(true);
     setError("");
     setResult(null);
     try {
-      const response = await api.verifyPayment(token, { paymentId: target.id });
+      const response = await api.verifyPayment(token, { paymentId: target.id, billNumber: bill });
       setResult(response);
       if (response.payment) {
         setSelectedPayment(response.payment);
         setPayments((current) => current.map((payment) => (payment.id === response.payment!.id ? response.payment! : payment)));
         onVerified?.(response.payment);
+        if (response.result === "VERIFIED") setBillNumber("");
       }
     } catch (verifyError) {
       setError(verifyError instanceof Error ? verifyError.message : "Verification failed");
@@ -868,9 +876,23 @@ function VerifyScreen({
                   </dl>
                 </section>
 
+                {selectedPayment.verifiedStatus ? (
+                  selectedPayment.billNumber ? <div className="bill-chip">Bill {selectedPayment.billNumber}</div> : null
+                ) : (
+                  <label className="bill-field">
+                    Bill number
+                    <input
+                      value={billNumber}
+                      onChange={(event) => setBillNumber(event.target.value)}
+                      placeholder="e.g. table/tab/bill no."
+                      maxLength={60}
+                    />
+                  </label>
+                )}
+
                 <button
                   className="primary-button verify-button"
-                  disabled={selectedPayment.verifiedStatus || verifying}
+                  disabled={selectedPayment.verifiedStatus || verifying || !billNumber.trim()}
                   onClick={() => void verifySelected()}
                   type="button"
                 >
@@ -944,7 +966,13 @@ function VerifyScreen({
                   <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
                   <div><span>Received</span><strong>{dateTime(stkPayment.paymentTime)}</strong></div>
                 </div>
-                <button className="primary-button" type="button" onClick={() => void verifySelected(stkPayment)} disabled={verifying || stkPayment.verifiedStatus}>
+                {!stkPayment.verifiedStatus ? (
+                  <label className="bill-field">
+                    Bill number
+                    <input value={billNumber} onChange={(event) => setBillNumber(event.target.value)} placeholder="e.g. table/tab/bill no." maxLength={60} />
+                  </label>
+                ) : null}
+                <button className="primary-button" type="button" onClick={() => void verifySelected(stkPayment)} disabled={verifying || stkPayment.verifiedStatus || !billNumber.trim()}>
                   {verifying && <Loader2 className="spin" size={18} />}
                   {verifying ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>

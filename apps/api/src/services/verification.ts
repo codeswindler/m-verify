@@ -9,6 +9,7 @@ type VerificationInput = {
   transactionCode?: string;
   amount?: number;
   reference?: string;
+  billNumber?: string;
 };
 
 type PaymentRow = RowDataPacket & {
@@ -17,6 +18,7 @@ type PaymentRow = RowDataPacket & {
   tenant_name: string | null;
   customer_name: string | null;
   reference: string | null;
+  bill_number: string | null;
   phone_number: string;
   transaction_code: string;
   amount: string;
@@ -55,7 +57,7 @@ const messages: Record<VerificationStatus, string> = {
 
 const paymentSelect = `SELECT
   p.id, p.tenant_id, t.name AS tenant_name,
-  p.customer_name, p.reference, p.phone_number, p.transaction_code, p.amount, p.payment_channel, p.status, p.payment_time,
+  p.customer_name, p.reference, p.bill_number, p.phone_number, p.transaction_code, p.amount, p.payment_channel, p.status, p.payment_time,
   p.verified_status, p.verified_at,
   u.id AS verified_by_id, u.username AS verified_by_username, u.full_name AS verified_by_full_name, u.role AS verified_by_role
 FROM payments p
@@ -69,6 +71,7 @@ function paymentToSummary(payment: PaymentRow): PaymentSummary {
     tenantName: payment.tenant_name,
     customerName: payment.customer_name,
     reference: payment.reference,
+    billNumber: payment.bill_number,
     phoneNumber: maskPhoneNumber(payment.phone_number),
     transactionCode: payment.transaction_code,
     amount: String(payment.amount),
@@ -168,6 +171,9 @@ export async function searchReceivedPayments(
   params.push(`%${normalizedCode}%`);
 
   searchClauses.push("p.customer_name LIKE ?");
+  params.push(`%${trimmed}%`);
+
+  searchClauses.push("p.bill_number LIKE ?");
   params.push(`%${trimmed}%`);
 
   const numericAmount = Number(trimmed.replace(/,/g, ""));
@@ -318,19 +324,60 @@ export async function verifyPayment(
       return { result: "NOT_FOUND", message: messages.NOT_FOUND };
     }
 
+    const billNumber = input.billNumber?.trim() || null;
+
     let result: VerificationStatus;
     if (lookup.amount !== null && moneyToCents(payment.amount) !== moneyToCents(lookup.amount)) {
       result = "AMOUNT_MISMATCH";
     } else if (Boolean(payment.verified_status)) {
       result = "ALREADY_VERIFIED";
+    } else if (!billNumber) {
+      await insertLog(connection, {
+        paymentId: Number(payment.id),
+        auth: audit.auth,
+        phoneNumber: lookup.phoneNumber,
+        transactionCode: lookup.transactionCode,
+        amount: lookup.amount,
+        reference: lookup.reference,
+        result: "ERROR",
+        ipAddress: audit.ipAddress,
+        userAgent: audit.userAgent,
+        notes: "Bill number was not provided"
+      });
+      return { result: "ERROR", message: "Enter a bill number to verify this payment.", payment: paymentToSummary(payment) };
     } else {
       result = "VERIFIED";
-      await connection.execute(
-        "UPDATE payments SET verified_status = TRUE, verified_by = ?, verified_at = UTC_TIMESTAMP() WHERE id = ?",
-        [audit.auth.user.id, payment.id]
-      );
+      try {
+        await connection.execute(
+          "UPDATE payments SET verified_status = TRUE, verified_by = ?, verified_at = UTC_TIMESTAMP(), bill_number = ? WHERE id = ?",
+          [audit.auth.user.id, billNumber, payment.id]
+        );
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "ER_DUP_ENTRY") {
+          await insertLog(connection, {
+            paymentId: Number(payment.id),
+            auth: audit.auth,
+            phoneNumber: lookup.phoneNumber,
+            transactionCode: lookup.transactionCode,
+            amount: lookup.amount,
+            reference: lookup.reference,
+            result: "ERROR",
+            ipAddress: audit.ipAddress,
+            userAgent: audit.userAgent,
+            notes: `Duplicate bill number ${billNumber}`
+          });
+          return {
+            result: "ERROR",
+            message: `Bill number ${billNumber} is already used for another payment.`,
+            payment: paymentToSummary(payment)
+          };
+        }
+        throw error;
+      }
       payment.verified_status = 1;
       payment.verified_at = new Date();
+      payment.bill_number = billNumber;
       payment.verified_by_id = audit.auth.user.id;
       payment.verified_by_username = audit.auth.user.username;
       payment.verified_by_full_name = audit.auth.user.fullName;

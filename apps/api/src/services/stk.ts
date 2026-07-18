@@ -38,6 +38,7 @@ type PaymentRow = RowDataPacket & {
   tenant_name: string | null;
   customer_name: string | null;
   reference: string | null;
+  bill_number: string | null;
   phone_number: string;
   transaction_code: string;
   amount: string;
@@ -81,7 +82,7 @@ type StkCallbackBody = {
 
 const paymentSelect = `SELECT
   p.id, p.tenant_id, t.name AS tenant_name,
-  p.customer_name, p.reference, p.phone_number, p.transaction_code, p.amount, p.payment_channel, p.status, p.payment_time,
+  p.customer_name, p.reference, p.bill_number, p.phone_number, p.transaction_code, p.amount, p.payment_channel, p.status, p.payment_time,
   p.verified_status, p.verified_at,
   u.id AS verified_by_id, u.username AS verified_by_username, u.full_name AS verified_by_full_name, u.role AS verified_by_role
 FROM payments p
@@ -95,6 +96,7 @@ function paymentToSummary(payment: PaymentRow): PaymentSummary {
     tenantName: payment.tenant_name,
     customerName: payment.customer_name,
     reference: payment.reference,
+    billNumber: payment.bill_number,
     phoneNumber: maskPhoneNumber(payment.phone_number),
     transactionCode: payment.transaction_code,
     amount: String(payment.amount),

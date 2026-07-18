@@ -208,7 +208,7 @@ export const api = {
   searchVerificationPayments(token: string, params: URLSearchParams) {
     return request<{ data: PaymentSummary[] }>(`/verify-payment/search?${params.toString()}`, { token });
   },
-  verifyPayment(token: string, payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string }) {
+  verifyPayment(token: string, payload: { paymentId?: number; phoneNumber?: string; transactionCode?: string; amount?: number; reference?: string; billNumber?: string }) {
     return request<VerificationResponse>("/verify-payment", { method: "POST", token, body: payload });
   },
   initiateStkPrompt(token: string, payload: { phoneNumber: string; amount: number; reference?: string }) {

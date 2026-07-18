@@ -76,6 +76,33 @@ button {
   color: #79e2a5;
 }
 
+.titlebar-user {
+  color: #9db4a8;
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verify-search-row {
+  display: flex;
+  gap: 7px;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.verify-search-row label {
+  flex: 1;
+  min-width: 0;
+}
+
+.stk-toggle {
+  white-space: nowrap;
+  min-height: 36px;
+}
+
 .window-actions {
   display: inline-flex;
   gap: 4px;
@@ -700,6 +727,52 @@ input:focus {
   display: grid;
   gap: 8px;
   margin: 2px 0 4px;
+}
+
+.bill-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2f5c47;
+}
+
+.bill-field input {
+  font-weight: 500;
+}
+
+.bill-chip {
+  align-self: start;
+  background: #e8f5ee;
+  color: #237a4b;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.row-meta {
+  color: #237a4b !important;
+  font-weight: 600;
+}
+
+.waiter-filter {
+  width: 100%;
+}
+
+.sales-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f4fbf7;
+  border: 1px solid #b9d8c6;
+  border-radius: 6px;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
+.sales-total strong {
+  color: #237a4b;
 }
 
 .selected-payment {

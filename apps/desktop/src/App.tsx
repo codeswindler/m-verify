@@ -183,6 +183,15 @@ function Titlebar({
       <div className="title-brand" data-tauri-drag-region>
         <ShieldCheck size={19} />
         <span data-tauri-drag-region>M-Verify</span>
+        {auth && (
+          <span
+            className="titlebar-user"
+            data-tauri-drag-region
+            title={`${auth.user.tenantName ?? auth.user.fullName} - ${auth.user.role === "manager" ? "business admin" : "staff"}`}
+          >
+            {auth.user.fullName}
+          </span>
+        )}
       </div>
       <div className="window-actions">
         {auth && (
@@ -374,6 +383,7 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
   const [query, setQuery] = useState("");
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentSummary | null>(null);
+  const [billNumber, setBillNumber] = useState("");
   const [receiptPayment, setReceiptPayment] = useState<PaymentSummary | null>(null);
   const [result, setResult] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState("");
@@ -426,17 +436,24 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
 
   async function verifySelected(target: PaymentSummary | null | undefined = selectedPayment) {
     if (!target) return;
+    const bill = billNumber.trim();
+    if (!bill) {
+      setError("Enter a bill number before verifying.");
+      return;
+    }
     setLoading(true);
     setError("");
     setResult(null);
     try {
       const response = await api.verifyPayment(auth.accessToken, {
-        paymentId: target.id
+        paymentId: target.id,
+        billNumber: bill
       });
       setResult(response);
       if (response.payment) {
         setSelectedPayment(response.payment);
         setPayments((current) => current.map((payment) => payment.id === response.payment!.id ? response.payment! : payment));
+        if (response.result === "VERIFIED") setBillNumber("");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
@@ -520,8 +537,19 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
 
   return (
     <section className="view-stack">
-      <div className="verify-actions">
-        <button className={showStk ? "small-button active" : "small-button"} type="button" onClick={() => setShowStk((value) => !value)}>
+      <div className="verify-search-row">
+        <label>
+          Search received payments
+          <div className="search-input">
+            <Search size={15} />
+            <input
+              placeholder="M-Pesa code, amount, or customer name"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+        </label>
+        <button className={showStk ? "small-button stk-toggle active" : "small-button stk-toggle"} type="button" onClick={() => setShowStk((value) => !value)}>
           STK prompt
         </button>
       </div>
@@ -554,18 +582,6 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
           )}
         </div>
       )}
-
-      <label>
-        Search received payments
-        <div className="search-input">
-          <Search size={15} />
-          <input
-            placeholder="M-Pesa code, amount, or customer name"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-      </label>
 
       <div className="payment-search-list">
         {!query.trim() && <div className="empty-state">Start typing to find a received payment.</div>}
@@ -625,11 +641,28 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
                   </dl>
                 </div>
 
+                {selectedPayment.verifiedStatus ? (
+                  selectedPayment.billNumber && (
+                    <div className="bill-chip">Bill {selectedPayment.billNumber}</div>
+                  )
+                ) : (
+                  <label className="bill-field">
+                    Bill number
+                    <input
+                      value={billNumber}
+                      onChange={(event) => setBillNumber(event.target.value)}
+                      placeholder="e.g. table/tab/bill no."
+                      maxLength={60}
+                      autoFocus
+                    />
+                  </label>
+                )}
+
                 <button
                   className="primary verify-button"
                   type="button"
                   onClick={() => void verifySelected()}
-                  disabled={loading || selectedPayment.verifiedStatus}
+                  disabled={loading || selectedPayment.verifiedStatus || !billNumber.trim()}
                 >
                   {loading && <Loader2 className="spin" size={16} />}
                   {loading ? "Verifying" : selectedPayment.verifiedStatus ? "Already verified" : "Verify selected payment"}
@@ -725,7 +758,18 @@ function VerifyView({ auth }: { auth: AuthResponse }) {
                   <div><span>Reference</span><strong>{stkPayment.reference ?? "-"}</strong></div>
                   <div><span>Received</span><strong>{formatDate(stkPayment.paymentTime)}</strong></div>
                 </div>
-                <button className="primary" type="button" onClick={() => void verifySelected(stkPayment)} disabled={loading || stkPayment.verifiedStatus}>
+                {!stkPayment.verifiedStatus && (
+                  <label className="bill-field">
+                    Bill number
+                    <input
+                      value={billNumber}
+                      onChange={(event) => setBillNumber(event.target.value)}
+                      placeholder="e.g. table/tab/bill no."
+                      maxLength={60}
+                    />
+                  </label>
+                )}
+                <button className="primary" type="button" onClick={() => void verifySelected(stkPayment)} disabled={loading || stkPayment.verifiedStatus || !billNumber.trim()}>
                   {loading && <Loader2 className="spin" size={16} />}
                   {loading ? "Verifying payment" : stkPayment.verifiedStatus ? "Already verified" : "Verify this payment"}
                 </button>
@@ -765,6 +809,13 @@ function PaymentRow({ payment, onReceipt }: { payment: PaymentSummary; onReceipt
       <div>
         <strong>KES {formatAmount(payment.amount)}</strong>
         <span>{payment.customerName || payment.reference || payment.transactionCode}</span>
+        {payment.verifiedStatus && (payment.billNumber || payment.verifiedBy) && (
+          <small className="row-meta">
+            {payment.billNumber ? `Bill ${payment.billNumber}` : ""}
+            {payment.billNumber && payment.verifiedBy ? " · " : ""}
+            {payment.verifiedBy ? payment.verifiedBy.fullName : ""}
+          </small>
+        )}
       </div>
       <div className="list-row-right">
         <span>{payment.verifiedStatus ? "Verified" : "Received"}</span>
@@ -842,6 +893,8 @@ function DashboardView({ token }: { token: string }) {
 
 function PaymentsView({ token }: { token: string }) {
   const [payments, setPayments] = useState<PaymentSummary[]>([]);
+  const [waiters, setWaiters] = useState<DesktopUser[]>([]);
+  const [waiterId, setWaiterId] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -851,8 +904,9 @@ function PaymentsView({ token }: { token: string }) {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ page: "1", limit: "25" });
+      const params = new URLSearchParams({ page: "1", limit: "50" });
       if (search.trim()) params.set("search", search.trim());
+      if (waiterId) params.set("verifiedBy", waiterId);
       const result = await api.listTransactions(token, params);
       setPayments(result.data);
     } catch (err) {
@@ -864,16 +918,38 @@ function PaymentsView({ token }: { token: string }) {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [waiterId]);
+
+  useEffect(() => {
+    api.listUsers(token)
+      .then((result) => setWaiters(result.data.filter((user) => user.role !== "admin")))
+      .catch(() => undefined);
+  }, [token]);
+
+  const totalVerified = payments
+    .filter((payment) => payment.verifiedStatus)
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
   return (
     <section className="view-stack">
       <div className="search-row">
-        <input placeholder="Search code, phone, reference" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input placeholder="Search bill no., amount, name, code" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(); }} />
         <button type="button" className="small-button" onClick={() => void load()} disabled={loading}>
           <RefreshCw size={13} />
         </button>
       </div>
+      <select className="waiter-filter" value={waiterId} onChange={(event) => setWaiterId(event.target.value)}>
+        <option value="">All staff</option>
+        {waiters.map((waiter) => (
+          <option key={waiter.id} value={String(waiter.id)}>{waiter.fullName}</option>
+        ))}
+      </select>
+      {waiterId && (
+        <div className="sales-total">
+          <span>{waiters.find((waiter) => String(waiter.id) === waiterId)?.fullName ?? "Staff"} verified sales</span>
+          <strong>KES {formatAmount(String(totalVerified))}</strong>
+        </div>
+      )}
       {error && <div className="error">{error}</div>}
       <div className="panel-list">
         {payments.length ? payments.map((payment) => <PaymentRow key={payment.id} payment={payment} onReceipt={setReceiptPayment} />) : <div className="empty-state">No payments found.</div>}
@@ -1047,13 +1123,6 @@ function LoggedInApp({ auth, update, onLogout }: { auth: AuthResponse; update: U
       <Titlebar auth={auth} alwaysTop={alwaysTop} onToggleTop={() => void toggleAlwaysTop()} onLogout={() => void logout()} />
       <section className="content verifier-content">
         <UpdateBanner update={update} />
-        <div className="operator-row">
-          <div>
-            <strong>{auth.user.tenantName ?? auth.user.fullName}</strong>
-            <span>{auth.user.role === "manager" ? "business admin" : "staff"}</span>
-          </div>
-          <CheckCircle2 size={18} />
-        </div>
         {isManager && (
           <nav className="role-tabs">
             <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")} type="button"><BarChart3 size={13} /> Dashboard</button>

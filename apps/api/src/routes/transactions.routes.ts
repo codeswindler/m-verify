@@ -16,6 +16,7 @@ type PaymentRow = RowDataPacket & {
   tenant_name: string | null;
   customer_name: string | null;
   reference: string | null;
+  bill_number: string | null;
   phone_number: string;
   transaction_code: string;
   amount: string;
@@ -58,14 +59,22 @@ function buildPaymentWhere(
   }
 
   if (query.search) {
-    clauses.push("(p.transaction_code LIKE ? OR p.phone_number LIKE ? OR p.reference LIKE ? OR p.customer_name LIKE ? OR t.name LIKE ?)");
+    clauses.push("(p.transaction_code LIKE ? OR p.phone_number LIKE ? OR p.reference LIKE ? OR p.bill_number LIKE ? OR p.customer_name LIKE ? OR t.name LIKE ?)");
     params.push(
       `%${query.search.toUpperCase()}%`,
       `%${query.search.replace(/[^\d]/g, "")}%`,
       `%${query.search}%`,
       `%${query.search}%`,
+      `%${query.search}%`,
       `%${query.search}%`
     );
+  }
+
+  // Managers/admins can narrow the list to a single verifier (waiter). Waiters are
+  // already restricted to their own verifications above.
+  if (query.verifiedBy && auth.user.role !== "waiter") {
+    clauses.push("p.verified_by = ?");
+    params.push(query.verifiedBy);
   }
 
   if (query.status && paymentStatuses.includes(query.status as PaymentStatus)) {
@@ -86,6 +95,7 @@ function mapPayment(row: PaymentRow): PaymentSummary {
     tenantName: row.tenant_name,
     customerName: row.customer_name,
     reference: row.reference,
+    billNumber: row.bill_number,
     phoneNumber: maskPhoneNumber(row.phone_number),
     transactionCode: row.transaction_code,
     amount: String(row.amount),
@@ -108,7 +118,7 @@ function mapPayment(row: PaymentRow): PaymentSummary {
 
 const paymentSelect = `SELECT
   p.id, p.tenant_id, t.name AS tenant_name,
-  p.customer_name, p.reference, p.phone_number, p.transaction_code, p.amount, p.payment_channel, p.status, p.payment_time,
+  p.customer_name, p.reference, p.bill_number, p.phone_number, p.transaction_code, p.amount, p.payment_channel, p.status, p.payment_time,
   p.verified_status, p.verified_at,
   u.id AS verified_by_id, u.username AS verified_by_username, u.full_name AS verified_by_full_name, u.role AS verified_by_role
 FROM payments p
@@ -133,6 +143,7 @@ transactionsRouter.get(
       tenantName: payment.tenantName,
       customerName: payment.customerName,
       reference: payment.reference,
+      billNumber: payment.billNumber ?? "",
       phoneNumber: payment.phoneNumber,
       transactionCode: payment.transactionCode,
       amount: payment.amount,
@@ -150,6 +161,7 @@ transactionsRouter.get(
         ["id", "ID"],
         ["customerName", "Customer"],
         ["reference", "Reference"],
+        ["billNumber", "Bill Number"],
         ["phoneNumber", "Phone Number"],
         ["transactionCode", "Transaction Code"],
         ["amount", "Amount"],
